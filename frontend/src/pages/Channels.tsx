@@ -86,6 +86,7 @@ export default function Channels() {
         api_key: values.api_key,
         models: values.models || '',
         priority: Number(values.priority) || 0,
+        fixed_path: values.fixed_path || '',
         status: 1,
       }
       if (editing) {
@@ -186,6 +187,7 @@ export default function Channels() {
                   api_key: editing.api_key,
                   models: editing.models,
                   priority: editing.priority,
+                  fixed_path: editing.fixed_path,
                 }
               : { type: 'openai', priority: 0 }
           }
@@ -219,6 +221,11 @@ export default function Channels() {
             />
             <Button onClick={handleAddModel}>填入</Button>
           </div>
+          <Form.Input
+            field="fixed_path"
+            label="固定路径"
+            placeholder="留空则使用标准 OpenAI 路径，如 /v1/draw/completions"
+          />
           <Form.InputNumber field="priority" label="优先级" placeholder="数字越大越优先" />
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>

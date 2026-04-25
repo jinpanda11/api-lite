@@ -18,6 +18,7 @@ type Channel struct {
 	Models    string         `gorm:"size:1024" json:"models"`   // comma-separated model names
 	Priority  int            `gorm:"default:0" json:"priority"` // higher = preferred
 	Status    int            `gorm:"default:1" json:"status"`
+	FixedPath string         `gorm:"size:128" json:"fixed_path"`
 }
 
 func GetAvailableChannels() ([]Channel, error) {

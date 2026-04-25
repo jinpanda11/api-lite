@@ -73,11 +73,19 @@ func Relay(c *gin.Context) {
 
 	// ── 4. Build upstream request ────────────────────────────────────────────────
 	// Use c.Param("path") (captured by /v1/*path) to avoid duplicating /v1 prefix
-	upstreamPath := c.Param("path")
-	if c.Request.URL.RawQuery != "" {
-		upstreamPath += "?" + c.Request.URL.RawQuery
+	var upstreamURL string
+	if channel.FixedPath != "" {
+		upstreamURL = strings.TrimRight(channel.BaseURL, "/") + channel.FixedPath
+		if c.Request.URL.RawQuery != "" {
+			upstreamURL += "?" + c.Request.URL.RawQuery
+		}
+	} else {
+		upstreamPath := c.Param("path")
+		if c.Request.URL.RawQuery != "" {
+			upstreamPath += "?" + c.Request.URL.RawQuery
+		}
+		upstreamURL = strings.TrimRight(channel.BaseURL, "/") + upstreamPath
 	}
-	upstreamURL := strings.TrimRight(channel.BaseURL, "/") + upstreamPath
 
 	req, err := http.NewRequest(c.Request.Method, upstreamURL, bytes.NewBuffer(bodyBytes))
 	if err != nil {

@@ -40,6 +40,7 @@ export interface Channel {
   models: string
   priority: number
   status: number
+  fixed_path?: string
   created_at: string
 }
 

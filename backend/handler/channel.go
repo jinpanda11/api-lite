@@ -94,10 +94,14 @@ func TestChannel(c *gin.Context) {
 
 	// Test connectivity by calling the models endpoint on the upstream
 	baseURL := strings.TrimRight(channel.BaseURL, "/")
-	testURL := baseURL + "/models"
-	// If the base_url doesn't already include /v1, add it
-	if !strings.HasSuffix(baseURL, "/v1") {
-		testURL = baseURL + "/v1/models"
+	var testURL string
+	if channel.FixedPath != "" {
+		testURL = baseURL + channel.FixedPath
+	} else {
+		testURL = baseURL + "/models"
+		if !strings.Contains(baseURL, "/v1") {
+			testURL = baseURL + "/v1/models"
+		}
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
@@ -233,7 +237,7 @@ func ListModels(c *gin.Context) {
 func fetchUpstreamModels(ch model.Channel) []string {
 	baseURL := strings.TrimRight(ch.BaseURL, "/")
 	modelsURL := baseURL + "/models"
-	if !strings.HasSuffix(baseURL, "/v1") {
+	if !strings.Contains(baseURL, "/v1") {
 		modelsURL = baseURL + "/v1/models"
 	}
 
