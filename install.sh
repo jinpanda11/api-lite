@@ -94,8 +94,8 @@ fi
 # ─── 5. Build ───────────────────────────────────────────
 info "构建前端..."
 cd frontend
-npm install --silent
-npm run build
+NODE_OPTIONS="--max-old-space-size=512" npm install --silent
+NODE_OPTIONS="--max-old-space-size=512" npm run build
 cd ..
 
 info "构建后端..."

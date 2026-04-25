@@ -8,7 +8,7 @@ echo "=== 更新 api-lite ==="
 git pull
 
 echo "构建前端..."
-cd frontend && npm install --silent && npm run build && cd ..
+cd frontend && NODE_OPTIONS="--max-old-space-size=512" npm install --silent && NODE_OPTIONS="--max-old-space-size=512" npm run build && cd ..
 
 echo "构建后端..."
 cd backend && go build -ldflags="-s -w" -o new-api-lite . && cd ..
