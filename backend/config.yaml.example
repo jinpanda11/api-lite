@@ -1,0 +1,26 @@
+server:
+  port: 3000
+  debug: false
+
+database:
+  driver: sqlite       # sqlite or mysql
+  dsn: "new-api-lite.db"
+  # For MySQL: "user:pass@tcp(127.0.0.1:3306)/new_api_lite?charset=utf8mb4&parseTime=True&loc=Local"
+
+jwt:
+  secret: "change-me-in-production"
+  expire_hours: 168    # 7 days
+
+smtp:
+  host: "smtp.example.com"
+  port: 465
+  username: "noreply@example.com"
+  password: "your-smtp-password"
+  from: "New API Lite <noreply@example.com>"
+  ssl: true
+
+# First admin user (created automatically on first run if no users exist)
+admin:
+  username: "admin"
+  email: "admin@example.com"
+  password: "Admin123456"

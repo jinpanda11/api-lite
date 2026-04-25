@@ -1,0 +1,21 @@
+[Unit]
+Description=new-api-lite - API Management System
+After=network.target
+
+[Service]
+Type=simple
+User=deploy
+WorkingDirectory=/opt/new-api-lite
+ExecStart=/opt/new-api-lite/backend/new-api-lite
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
