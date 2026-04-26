@@ -78,7 +78,8 @@ func Relay(c *gin.Context) {
 	}
 
 	// ── 4. Build upstream request ────────────────────────────────────────────────
-	// Use c.Param("path") (captured by /v1/*path) to avoid duplicating /v1 prefix
+	// Strip /v1 from base URL (if present) then append the full request path,
+	// so both "https://api.openai.com" and "https://api.openai.com/v1" work.
 	var upstreamURL string
 	if channel.Type == "image" && channel.FixedPath != "" {
 		upstreamURL = strings.TrimRight(channel.BaseURL, "/") + channel.FixedPath
@@ -86,7 +87,9 @@ func Relay(c *gin.Context) {
 			upstreamURL += "?" + c.Request.URL.RawQuery
 		}
 	} else {
-		upstreamURL = strings.TrimRight(channel.BaseURL, "/") + c.Param("path")
+		baseURL := strings.TrimRight(channel.BaseURL, "/")
+		baseURL = strings.TrimSuffix(baseURL, "/v1")
+		upstreamURL = baseURL + c.Request.URL.Path
 		if c.Request.URL.RawQuery != "" {
 			upstreamURL += "?" + c.Request.URL.RawQuery
 		}
