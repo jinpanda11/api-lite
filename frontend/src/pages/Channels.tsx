@@ -193,7 +193,10 @@ export default function Channels() {
           }
         >
           <Form.Input field="name" label="名称" placeholder="渠道名称" rules={[{ required: true }]} />
-          <Form.Input field="type" label="类型" placeholder="openai / azure / custom" />
+          <Form.Select field="type" label="类型" style={{ width: '100%' }}>
+            <Form.Select.Option value="openai">OpenAI（标准对话）</Form.Select.Option>
+            <Form.Select.Option value="image">Image（画图接口）</Form.Select.Option>
+          </Form.Select>
           <Form.Input
             field="base_url"
             label="Base URL"

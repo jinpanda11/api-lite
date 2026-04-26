@@ -57,7 +57,7 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	req.ID = channel.ID
-	if err := model.DB.Save(&req).Error; err != nil {
+	if err := model.DB.Model(&channel).Updates(req).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -129,7 +129,7 @@ func TestChannel(c *gin.Context) {
 
 	body, _ := io.ReadAll(resp.Body)
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= 400 && channel.Type != "image" {
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error":      "upstream returned " + strconv.Itoa(resp.StatusCode),
 			"channel":    channel.Name,

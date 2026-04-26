@@ -18,7 +18,20 @@ import type { Token } from '../types'
 const { Title, Text } = Typography
 
 function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text).then(() => Toast.success('已复制到剪贴板'))
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(() => Toast.success('已复制到剪贴板'))
+  } else {
+    // Fallback for HTTP (非安全环境)
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.select()
+    document.execCommand('copy')
+    document.body.removeChild(ta)
+    Toast.success('已复制到剪贴板')
+  }
 }
 
 export default function Tokens() {

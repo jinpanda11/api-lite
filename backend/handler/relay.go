@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"bufio"
 	"bytes"
 	"encoding/json"
@@ -74,17 +75,16 @@ func Relay(c *gin.Context) {
 	// ── 4. Build upstream request ────────────────────────────────────────────────
 	// Use c.Param("path") (captured by /v1/*path) to avoid duplicating /v1 prefix
 	var upstreamURL string
-	if channel.FixedPath != "" {
+	if channel.Type == "image" && channel.FixedPath != "" {
 		upstreamURL = strings.TrimRight(channel.BaseURL, "/") + channel.FixedPath
 		if c.Request.URL.RawQuery != "" {
 			upstreamURL += "?" + c.Request.URL.RawQuery
 		}
 	} else {
-		upstreamPath := c.Param("path")
+		upstreamURL = strings.TrimRight(channel.BaseURL, "/") + c.Request.URL.Path
 		if c.Request.URL.RawQuery != "" {
-			upstreamPath += "?" + c.Request.URL.RawQuery
+			upstreamURL += "?" + c.Request.URL.RawQuery
 		}
-		upstreamURL = strings.TrimRight(channel.BaseURL, "/") + upstreamPath
 	}
 
 	req, err := http.NewRequest(c.Request.Method, upstreamURL, bytes.NewBuffer(bodyBytes))
@@ -113,15 +113,35 @@ func Relay(c *gin.Context) {
 	defer resp.Body.Close()
 
 	// ── 6. Copy response headers to client ───────────────────────────────────────
+
+	isImageChannel := channel.Type == "image"
+		contentType := resp.Header.Get("Content-Type")
+	isSSE := strings.Contains(contentType, "text/event-stream")
+
+		if isImageChannel && !isSSE {
+			// Peek at body to detect SSE even with wrong Content-Type
+		if !isSSE {
+			bufReader := bufio.NewReader(resp.Body)
+			peek, _ := bufReader.Peek(6)
+			isSSE = strings.HasPrefix(string(peek), "data: ")
+			resp.Body = io.NopCloser(bufReader)
+		}
+		}
 	for k, vs := range resp.Header {
+		if isImageChannel && isSSE && strings.EqualFold(k, "Content-Type") {
+			continue
+		}
 		for _, v := range vs {
 			c.Header(k, v)
 		}
 	}
 
-	// ── 7. Handle response (stream vs non-stream) ────────────────────────────────
+
+	// ──── 7. Handle response (stream vs non-stream) ────────────────
 	if isStream {
 		handleStream(c, resp, user, dbToken, channel, modelName, startTime)
+	} else if isImageChannel && isSSE {
+		handleSSENonStream(c, resp, user, dbToken, channel, modelName, startTime)
 	} else {
 		handleNonStream(c, resp, user, dbToken, channel, modelName, startTime)
 	}
@@ -155,7 +175,7 @@ func handleStream(c *gin.Context, resp *http.Response, user *model.User,
 			data := strings.TrimPrefix(line, "data: ")
 			if data == "[DONE]" {
 				break
-			}
+		}
 			var chunk streamChunk
 			if err := json.Unmarshal([]byte(data), &chunk); err == nil {
 				if chunk.Usage.PromptTokens > 0 {
@@ -165,7 +185,7 @@ func handleStream(c *gin.Context, resp *http.Response, user *model.User,
 						cacheTokens = chunk.Usage.PromptTokensDetails.CachedTokens
 					}
 				}
-			}
+		}
 		}
 	}
 
@@ -219,7 +239,7 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 			totalCost := mp.CallPrice
 			if totalCost > 0 {
 				_ = user.DeductBalance(totalCost)
-			}
+		}
 			log := &model.Log{
 				UserID:       user.ID,
 				TokenID:      token.ID,
@@ -232,10 +252,10 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 				Cost:         totalCost,
 				Status:       1,
 				RequestPath:  path,
-			}
+		}
 			if statusCode >= 400 {
 				log.Status = 2
-			}
+		}
 			_ = model.CreateLog(log)
 			return
 		}
@@ -272,6 +292,82 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 		RequestPath:  path,
 	}
 	_ = model.CreateLog(log)
+}
+
+
+
+
+// handleSSENonStream converts upstream SSE response to JSON for non-stream requests.
+func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
+	token *model.Token, channel *model.Channel, modelName string, startTime time.Time) {
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, openAIError("failed to read upstream response"))
+		return
+	}
+
+	// Collect all SSE data events to find the final result
+	var lastData string
+	for _, line := range strings.Split(string(bodyBytes), "\n") {
+		if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, "data: ") {
+			lastData = strings.TrimPrefix(trimmed, "data: ")
+		}
+	}
+
+	// Try to extract image URL from the final event (grsai format: results[].url)
+	if lastData != "" {
+		var event struct {
+			Results []struct {
+				URL string `json:"url"`
+		} `json:"results"`
+		}
+		if json.Unmarshal([]byte(lastData), &event) == nil && len(event.Results) > 0 {
+			urls := make([]gin.H, len(event.Results))
+			for i, r := range event.Results {
+				urls[i] = gin.H{"url": r.URL, "b64_json": nil}
+		}
+			// Determine response format based on original request path
+			path := c.Request.URL.Path
+			isChatEndpoint := strings.Contains(path, "/chat/completions")
+
+			if isChatEndpoint {
+				// Return chat completions format for CherryStudio etc.
+				c.JSON(http.StatusOK, gin.H{
+					"choices": []gin.H{
+						{
+							"message": gin.H{
+								"content": fmt.Sprintf("![image](%s)", event.Results[0].URL),
+								"role":     "assistant",
+							},
+							"finish_reason": "stop",
+						},
+					},
+					"usage": gin.H{
+						"prompt_tokens":     0,
+						"completion_tokens": 0,
+						"total_tokens":      0,
+					},
+					"created": time.Now().Unix(),
+					"model":   modelName,
+				})
+		} else {
+				// Return OpenAI image generation format for /v1/images/generations
+				c.JSON(http.StatusOK, gin.H{
+					"created": time.Now().Unix(),
+					"data":    urls,
+				})
+		}
+			go recordLog(user, token, channel, modelName, 0, 0, 0,
+				http.StatusOK, c.Request.URL.Path, startTime)
+			return
+	}
+
+	// Fallback: upstream returned SSE format we cannot parse
+	c.Data(resp.StatusCode, "text/plain; charset=utf-8", bodyBytes)
+	go recordLog(user, token, channel, modelName, 0, 0, 0,
+		resp.StatusCode, c.Request.URL.Path, startTime)
+}
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
