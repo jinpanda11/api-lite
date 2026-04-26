@@ -56,16 +56,6 @@ services:
       - ./backend:/app/data
     environment:
       - GIN_MODE=release
-
-  watchtower:
-    image: containrrr/watchtower:latest
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    command:
-      - --interval=30
-      - --cleanup
-      - api-lite
 DOCKEREOF
 
 # ─── 5. Create default config if missing ─────────────────
@@ -114,7 +104,19 @@ docker compose pull
 info "启动服务..."
 docker compose up -d
 
-# ─── 8. Verify ───────────────────────────────────────────
+# ─── 8. Setup auto-update cron ───────────────────────────
+cat > "$INSTALL_DIR/update.sh" << 'UPEOF'
+#!/bin/bash
+cd /opt/api-lite
+docker compose pull api-lite 2>&1 | grep -q "Downloaded newer" && docker compose up -d api-lite
+UPEOF
+chmod +x "$INSTALL_DIR/update.sh"
+
+# Add cron job to run every minute
+(crontab -l 2>/dev/null | grep -v update.sh; echo "* * * * * $INSTALL_DIR/update.sh") | crontab -
+info "自动更新已配置 (cron 每分钟检查)"
+
+# ─── 9. Verify ───────────────────────────────────────────
 sleep 3
 echo ""
 if docker compose ps --status running 2>/dev/null | grep -q api-lite; then
@@ -128,8 +130,8 @@ if docker compose ps --status running 2>/dev/null | grep -q api-lite; then
   echo ""
   echo "  配置: vi $INSTALL_DIR/backend/config.yaml"
   echo "  日志: docker compose -f $INSTALL_DIR/docker-compose.yml logs -f"
-  echo "  更新: 自动 (Watchtower 每 30 秒检查新镜像)"
-  echo "  手动更新: docker compose -f $INSTALL_DIR/docker-compose.yml pull && docker compose -f $INSTALL_DIR/docker-compose.yml up -d"
+  echo "  更新: 自动 (cron 每分钟检查新镜像)"
+  echo "  手动: docker compose -f $INSTALL_DIR/docker-compose.yml pull && docker compose -f $INSTALL_DIR/docker-compose.yml up -d"
   echo ""
 else
   err "启动失败，检查日志: docker compose -f $INSTALL_DIR/docker-compose.yml logs"

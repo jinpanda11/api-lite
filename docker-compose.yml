@@ -8,13 +8,3 @@ services:
       - ./backend:/app/data
     environment:
       - GIN_MODE=release
-
-  watchtower:
-    image: containrrr/watchtower:latest
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    command:
-      - --interval=30
-      - --cleanup
-      - api-lite
