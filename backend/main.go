@@ -8,6 +8,7 @@ import (
 	"new-api-lite/config"
 	"new-api-lite/model"
 	"new-api-lite/router"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,7 +18,11 @@ var webFiles embed.FS
 
 func main() {
 	// Load configuration
-	config.Load("config.yaml")
+	configPath := os.Getenv("CONFIG_PATH")
+	if configPath == "" {
+		configPath = "config.yaml"
+	}
+	config.Load(configPath)
 
 	// Init database and auto-migrate
 	model.Init()

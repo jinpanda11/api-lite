@@ -1,0 +1,20 @@
+services:
+  api-lite:
+    image: ghcr.io/jinpanda11/api-lite:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app/data
+    environment:
+      - GIN_MODE=release
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - --interval=30
+      - --cleanup
+      - api-lite

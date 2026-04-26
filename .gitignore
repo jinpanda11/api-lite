@@ -1,5 +1,6 @@
 # Backend binary
 backend/new-api-lite
+backend/new-api-lite-linux
 backend/new-api-lite.exe
 backend/*.exe~
 

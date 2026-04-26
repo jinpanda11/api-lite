@@ -1,0 +1,26 @@
+.git
+.gitignore
+*.md
+CLAUDE.md
+
+# Frontend
+frontend/node_modules
+frontend/dist
+
+# Backend
+backend/new-api-lite
+backend/new-api-lite-linux
+backend/web
+backend/config.yaml
+
+# Python scripts
+*.py
+check_vps.py
+deploy.py
+upload.py
+
+# Misc
+.env
+.DS_Store
+Thumbs.db
+*.log
