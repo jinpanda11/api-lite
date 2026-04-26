@@ -67,7 +67,7 @@ func Relay(c *gin.Context) {
 	}
 
 	// Extract model name for channel selection and billing
-	modelName := extractModel(bodyBytes, c.Request.URL.Path)
+	modelName := extractModel(bodyBytes, c.Param("path"))
 	isStream := isStreamRequest(bodyBytes)
 
 	// ── 3. Select upstream channel ───────────────────────────────────────────────
@@ -86,7 +86,7 @@ func Relay(c *gin.Context) {
 			upstreamURL += "?" + c.Request.URL.RawQuery
 		}
 	} else {
-		upstreamURL = strings.TrimRight(channel.BaseURL, "/") + c.Request.URL.Path
+		upstreamURL = strings.TrimRight(channel.BaseURL, "/") + c.Param("path")
 		if c.Request.URL.RawQuery != "" {
 			upstreamURL += "?" + c.Request.URL.RawQuery
 		}
@@ -216,7 +216,7 @@ func handleStream(c *gin.Context, resp *http.Response, user *model.User,
 
 	// Record log asynchronously to avoid blocking the response
 	go recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
-		resp.StatusCode, c.Request.URL.Path, startTime)
+		resp.StatusCode, c.Param("path"), startTime)
 }
 
 // handleNonStream reads the full response, records log, and returns to client.
@@ -240,7 +240,7 @@ func handleNonStream(c *gin.Context, resp *http.Response, user *model.User,
 	}
 
 	go recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
-		resp.StatusCode, c.Request.URL.Path, startTime)
+		resp.StatusCode, c.Param("path"), startTime)
 
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
 }
@@ -356,7 +356,7 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 				urls[i] = gin.H{"url": r.URL, "b64_json": nil}
 		}
 			// Determine response format based on original request path
-			path := c.Request.URL.Path
+			path := c.Param("path")
 			isChatEndpoint := strings.Contains(path, "/chat/completions")
 
 			if isChatEndpoint {
@@ -387,14 +387,14 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 				})
 		}
 			go recordLog(user, token, channel, modelName, 0, 0, 0,
-				http.StatusOK, c.Request.URL.Path, startTime)
+				http.StatusOK, c.Param("path"), startTime)
 			return
 	}
 
 	// Fallback: upstream returned SSE format we cannot parse
 	c.Data(resp.StatusCode, "text/plain; charset=utf-8", bodyBytes)
 	go recordLog(user, token, channel, modelName, 0, 0, 0,
-		resp.StatusCode, c.Request.URL.Path, startTime)
+		resp.StatusCode, c.Param("path"), startTime)
 }
 }
 
