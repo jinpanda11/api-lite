@@ -94,24 +94,33 @@ func TestChannel(c *gin.Context) {
 
 	// Test connectivity by calling a suitable endpoint on the upstream
 	baseURL := strings.TrimRight(channel.BaseURL, "/")
-	var testURL string
-	if channel.Type == "image" {
-		// Image APIs may not support /v1/models; test the fixed path or a simple ping
+	var testMethod, testURL string
+	isImage := channel.Type == "image"
+
+	if isImage {
+		// Image APIs expect POST; test the actual endpoint
 		if channel.FixedPath != "" {
 			testURL = baseURL + channel.FixedPath
 		} else {
-			// Just GET the base URL to verify connectivity
-			testURL = baseURL
+			testURL = baseURL + "/v1/images/generations"
 		}
+		testMethod = "POST"
 	} else {
 		testURL = baseURL + "/models"
 		if !strings.Contains(baseURL, "/v1") {
 			testURL = baseURL + "/v1/models"
 		}
+		testMethod = "GET"
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
-	testReq, err := http.NewRequest("GET", testURL, nil)
+	var testReq *http.Request
+	var err error
+	if testMethod == "POST" {
+		testReq, err = http.NewRequest("POST", testURL, strings.NewReader(`{}`))
+	} else {
+		testReq, err = http.NewRequest("GET", testURL, nil)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build request: " + err.Error()})
 		return
@@ -134,13 +143,12 @@ func TestChannel(c *gin.Context) {
 	defer resp.Body.Close()
 
 	body, _ := io.ReadAll(resp.Body)
-
 	bodyStr := string(body)
 	if len(bodyStr) > 500 {
 		bodyStr = bodyStr[:500] + "..."
 	}
 
-	if resp.StatusCode >= 400 && channel.Type != "image" {
+	if resp.StatusCode >= 400 && !isImage {
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error":      "upstream returned " + strconv.Itoa(resp.StatusCode),
 			"channel":    channel.Name,
@@ -152,9 +160,11 @@ func TestChannel(c *gin.Context) {
 		return
 	}
 
+	// For image channels, any response (even 4xx) means the server is reachable.
+	// A 401/422 is a valid response that proves connectivity.
 	msg := "connection ok"
-	if resp.StatusCode >= 400 {
-		msg = fmt.Sprintf("reachable but upstream returned %d (may not support this test URL)", resp.StatusCode)
+	if isImage && resp.StatusCode >= 400 {
+		msg = fmt.Sprintf("connection ok (upstream returned %d, which is normal for image APIs)", resp.StatusCode)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
