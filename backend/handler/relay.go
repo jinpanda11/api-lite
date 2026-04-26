@@ -237,9 +237,14 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 	if err := model.DB.Where("model_name = ?", modelName).First(&mp).Error; err == nil {
 		if mp.BillingMode == "call" {
 			totalCost := mp.CallPrice
+			status := 1
+			if statusCode >= 400 {
+				status = 2
+				totalCost = 0
+			}
 			if totalCost > 0 {
 				_ = user.DeductBalance(totalCost)
-		}
+			}
 			log := &model.Log{
 				UserID:       user.ID,
 				TokenID:      token.ID,
@@ -250,12 +255,9 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 				InputTokens:  inputTokens,
 				OutputTokens: outputTokens,
 				Cost:         totalCost,
-				Status:       1,
+				Status:       status,
 				RequestPath:  path,
-		}
-			if statusCode >= 400 {
-				log.Status = 2
-		}
+			}
 			_ = model.CreateLog(log)
 			return
 		}
@@ -272,6 +274,7 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 	status := 1
 	if statusCode >= 400 {
 		status = 2
+		totalCost = 0
 	}
 
 	if totalCost > 0 {
