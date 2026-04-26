@@ -19,10 +19,10 @@ RUN CGO_ENABLED=1 go build -ldflags="-s -w" -o new-api-lite .
 # Stage 3: Runtime
 FROM alpine:3.21
 RUN apk add --no-cache ca-certificates tzdata
-WORKDIR /app
-COPY --from=backend-builder /src/new-api-lite .
+WORKDIR /app/data
+COPY --from=backend-builder /src/new-api-lite /app/new-api-lite
 
-ENV CONFIG_PATH=/app/data/config.yaml
+ENV CONFIG_PATH=config.yaml
 EXPOSE 3000
 
-CMD ["./new-api-lite"]
+CMD ["/app/new-api-lite"]
