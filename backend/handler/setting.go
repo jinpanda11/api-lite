@@ -7,6 +7,22 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// GetBranding returns public site branding info.
+// GET /api/settings/branding
+func GetBranding(c *gin.Context) {
+	settings, err := model.GetAllSettings()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load settings"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"site_name":    settings["site_name"],
+		"site_logo":    settings["site_logo"],
+		"site_title":   settings["site_title"],
+		"site_favicon": settings["site_favicon"],
+	})
+}
+
 // GetSettings returns all system settings (admin).
 // GET /api/admin/settings
 func GetSettings(c *gin.Context) {

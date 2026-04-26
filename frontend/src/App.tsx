@@ -11,10 +11,12 @@ import Logs from './pages/Logs'
 import Wallet from './pages/Wallet'
 import Channels from './pages/Channels'
 import Settings from './pages/Settings'
+import Branding from './pages/Branding'
 import AdminRedeem from './pages/AdminRedeem'
 import AdminUsers from './pages/AdminUsers'
 import ModelPricing from './pages/ModelPricing'
 import AdminNotice from './pages/AdminNotice'
+import { getBranding } from './api'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const token = useAppStore((s) => s.token)
@@ -43,6 +45,7 @@ const ADMIN_ROUTES = [
   { path: '/admin/notice', element: <AdminNotice /> },
   { path: '/admin/redeem', element: <AdminRedeem /> },
   { path: '/admin/users', element: <AdminUsers /> },
+  { path: '/admin/branding', element: <Branding /> },
 ]
 
 export default function App() {
@@ -51,6 +54,16 @@ export default function App() {
   useEffect(() => {
     document.body.setAttribute('theme-mode', theme)
   }, [theme])
+
+  useEffect(() => {
+    getBranding()
+      .then((res) => {
+        const d = res.data || {}
+        if (d.site_title) document.title = d.site_title
+        if (d.site_favicon) setFavicon(d.site_favicon)
+      })
+      .catch(() => {})
+  }, [])
 
   return (
     <BrowserRouter>
@@ -97,4 +110,23 @@ export default function App() {
       </Routes>
     </BrowserRouter>
   )
+}
+
+function setFavicon(value: string) {
+  const old = document.querySelector('link[rel="icon"]')
+  if (old) old.remove()
+
+  const link = document.createElement('link')
+  link.rel = 'icon'
+
+  // Detect emoji (short non-URL value) vs image URL
+  const isEmoji = !value.includes('.') && !value.includes('/') && [...value].length <= 4
+  if (isEmoji) {
+    link.href = `data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">${value}</text></svg>`
+    link.type = 'image/svg+xml'
+  } else {
+    link.href = value
+  }
+
+  document.head.appendChild(link)
 }

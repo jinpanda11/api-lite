@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   Layout as SemiLayout,
@@ -26,7 +26,7 @@ import {
   IconPriceTag,
 } from '@douyinfe/semi-icons'
 import { useAppStore } from '../store'
-import { getUserInfo } from '../api'
+import { getUserInfo, getBranding } from '../api'
 import NoticeModal from './NoticeModal'
 
 const { Header, Sider, Content } = SemiLayout
@@ -51,12 +51,14 @@ const ADMIN_NAV_ITEMS = [
   { itemKey: '/admin/notice', text: '公告管理', icon: <IconBell /> },
   { itemKey: '/admin/redeem', text: '兑换码', icon: <IconGift /> },
   { itemKey: '/admin/users', text: '用户管理', icon: <IconUser /> },
+  { itemKey: '/admin/branding', text: '站点品牌', icon: <IconSetting /> },
 ]
 
 export default function AppLayout({ children }: LayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
   const { user, theme, setTheme, setUser, logout } = useAppStore()
+  const [branding, setBranding] = useState<Record<string, string>>({})
 
   useEffect(() => {
     document.body.setAttribute('theme-mode', theme)
@@ -67,6 +69,12 @@ export default function AppLayout({ children }: LayoutProps) {
       .then((res) => setUser(res.data))
       .catch(() => {})
   }, [setUser])
+
+  useEffect(() => {
+    getBranding()
+      .then((res) => setBranding(res.data || {}))
+      .catch(() => {})
+  }, [])
 
   const navItems =
     user?.role === 'admin'
@@ -99,8 +107,18 @@ export default function AppLayout({ children }: LayoutProps) {
           header={{
             logo: (
               <div style={{ padding: '16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 20 }}>⚡</span>
-                <Text strong style={{ fontSize: 16 }}>New API Lite</Text>
+                {branding.site_logo ? (
+                  branding.site_logo.startsWith('http') ? (
+                    <img src={branding.site_logo} alt="logo" style={{ width: 24, height: 24 }} />
+                  ) : (
+                    <span style={{ fontSize: 20 }}>{branding.site_logo}</span>
+                  )
+                ) : (
+                  <span style={{ fontSize: 20 }}>⚡</span>
+                )}
+                <Text strong style={{ fontSize: 16 }}>
+                  {branding.site_name || 'New API Lite'}
+                </Text>
               </div>
             ),
           }}

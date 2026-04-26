@@ -29,6 +29,7 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		api.POST("/user/login", handler.Login)
 
 		// Settings (public)
+		api.GET("/settings/branding", handler.GetBranding)
 		api.GET("/settings/email-verification", handler.GetEmailVerificationStatus)
 	}
 

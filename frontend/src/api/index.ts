@@ -88,6 +88,10 @@ export const redeemCode = (code: string) => request.post('/redeem', { code })
 
 export const getTopupLogs = () => request.get('/topup/logs')
 
+// ── Branding (public) ────────────────────────────────────────────────────────
+
+export const getBranding = () => request.get('/settings/branding')
+
 // ── Settings (admin) ────────────────────────────────────────────────────────
 
 export const getSettings = () => request.get('/admin/settings')
