@@ -92,11 +92,17 @@ func TestChannel(c *gin.Context) {
 		return
 	}
 
-	// Test connectivity by calling the models endpoint on the upstream
+	// Test connectivity by calling a suitable endpoint on the upstream
 	baseURL := strings.TrimRight(channel.BaseURL, "/")
 	var testURL string
-	if channel.FixedPath != "" {
-		testURL = baseURL + channel.FixedPath
+	if channel.Type == "image" {
+		// Image APIs may not support /v1/models; test the fixed path or a simple ping
+		if channel.FixedPath != "" {
+			testURL = baseURL + channel.FixedPath
+		} else {
+			// Just GET the base URL to verify connectivity
+			testURL = baseURL
+		}
 	} else {
 		testURL = baseURL + "/models"
 		if !strings.Contains(baseURL, "/v1") {
@@ -129,25 +135,35 @@ func TestChannel(c *gin.Context) {
 
 	body, _ := io.ReadAll(resp.Body)
 
+	bodyStr := string(body)
+	if len(bodyStr) > 500 {
+		bodyStr = bodyStr[:500] + "..."
+	}
+
 	if resp.StatusCode >= 400 && channel.Type != "image" {
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error":      "upstream returned " + strconv.Itoa(resp.StatusCode),
 			"channel":    channel.Name,
 			"url":        testURL,
 			"status":     resp.StatusCode,
-			"response":   string(body),
+			"response":   bodyStr,
 			"elapsed_ms": elapsed,
 		})
 		return
 	}
 
+	msg := "connection ok"
+	if resp.StatusCode >= 400 {
+		msg = fmt.Sprintf("reachable but upstream returned %d (may not support this test URL)", resp.StatusCode)
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"message":    "connection ok",
+		"message":    msg,
 		"channel":    channel.Name,
 		"url":        testURL,
 		"status":     resp.StatusCode,
 		"elapsed_ms": elapsed,
-		"models":     string(body),
+		"models":     bodyStr,
 	})
 }
 
