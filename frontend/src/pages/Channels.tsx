@@ -250,8 +250,8 @@ export default function Channels() {
       >
         {testResult ? (
           <div>
-            <Tag color={testResult.error ? 'red' : 'green'} size="large" style={{ marginBottom: 12 }}>
-              {testResult.error ? '失败' : '成功'}
+            <Tag color={testResult.error ? 'red' : testResult.status >= 400 ? 'orange' : 'green'} size="large" style={{ marginBottom: 12 }}>
+              {testResult.error ? '失败' : testResult.status >= 400 ? '通但非200' : '成功'}
             </Tag>
             {testResult.elapsed_ms != null && (
               <Text type="tertiary" style={{ marginLeft: 8 }}>延迟: {testResult.elapsed_ms}ms</Text>

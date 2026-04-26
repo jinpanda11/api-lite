@@ -161,10 +161,13 @@ func TestChannel(c *gin.Context) {
 	}
 
 	// For image channels, any response (even 4xx) means the server is reachable.
-	// A 401/422 is a valid response that proves connectivity.
 	msg := "connection ok"
 	if isImage && resp.StatusCode >= 400 {
-		msg = fmt.Sprintf("connection ok (upstream returned %d, which is normal for image APIs)", resp.StatusCode)
+		if resp.StatusCode == 404 && channel.FixedPath == "" {
+			msg = fmt.Sprintf("server reachable, but /v1/images/generations not found — set a fixed path for this channel")
+		} else {
+			msg = fmt.Sprintf("connection ok (upstream returned %d)", resp.StatusCode)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
