@@ -108,7 +108,8 @@ docker compose up -d
 cat > "$INSTALL_DIR/update.sh" << 'UPEOF'
 #!/bin/bash
 cd /opt/api-lite
-docker compose pull api-lite 2>&1 | grep -q "Downloaded newer" && docker compose up -d api-lite
+docker compose pull api-lite
+docker compose up -d --pull always api-lite
 UPEOF
 chmod +x "$INSTALL_DIR/update.sh"
 
