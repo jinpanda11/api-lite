@@ -102,21 +102,91 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 }
 
 // spaHandler serves the embedded frontend for SPA routing.
-// If the requested file exists, serve it directly; otherwise serve index.html
-// so React Router handles client-side routes.
+// Static assets (JS/CSS/fonts) get long-term cache headers because they have
+// hashed filenames. index.html gets no-cache to allow seamless deployments.
 func spaHandler(webFS fs.FS) gin.HandlerFunc {
-	fileServer := http.FileServer(http.FS(webFS))
 	return func(c *gin.Context) {
 		p := c.Request.URL.Path
 		if strings.HasPrefix(p, "/api") || strings.HasPrefix(p, "/v1") {
 			c.Status(http.StatusNotFound)
 			return
 		}
-		c.Request.URL.Path = strings.TrimPrefix(p, "/")
-		_, err := webFS.Open(c.Request.URL.Path)
-		if err != nil {
-			c.Request.URL.Path = "/"
+
+		// Normalize path: strip leading / and default to index.html
+		filePath := strings.TrimPrefix(p, "/")
+		if filePath == "" {
+			filePath = "index.html"
 		}
-		fileServer.ServeHTTP(c.Writer, c.Request)
+
+		// Try to serve the requested file; fall back to index.html (SPA routing)
+		data, err := fs.ReadFile(webFS, filePath)
+		if err != nil {
+			data, err = fs.ReadFile(webFS, "index.html")
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			serveFile(c, data, "index.html")
+			return
+		}
+		serveFile(c, data, filePath)
+	}
+}
+
+// serveFile writes file data with appropriate Content-Type and Cache-Control.
+func serveFile(c *gin.Context, data []byte, name string) {
+	ext := name[strings.LastIndexByte(name, '.')+1:]
+	ct := contentType(ext)
+	if ct != "" {
+		c.Header("Content-Type", ct)
+	}
+
+	// Hashed filenames → cache aggressively; index.html → never cache
+	if name == "index.html" {
+		c.Header("Cache-Control", "no-cache")
+	} else if isHashedAsset(name) {
+		c.Header("Cache-Control", "public, max-age=31536000, immutable")
+	}
+
+	c.Data(http.StatusOK, ct, data)
+}
+
+func isHashedAsset(name string) bool {
+	return strings.Contains(name, "-") &&
+		(strings.HasSuffix(name, ".js") || strings.HasSuffix(name, ".css") ||
+			strings.HasSuffix(name, ".woff") || strings.HasSuffix(name, ".woff2") ||
+			strings.HasSuffix(name, ".ttf") || strings.HasSuffix(name, ".svg") ||
+			strings.HasSuffix(name, ".png") || strings.HasSuffix(name, ".jpg") ||
+			strings.HasSuffix(name, ".webp") || strings.HasSuffix(name, ".ico"))
+}
+
+func contentType(ext string) string {
+	switch ext {
+	case "html":
+		return "text/html; charset=utf-8"
+	case "js":
+		return "text/javascript; charset=utf-8"
+	case "css":
+		return "text/css; charset=utf-8"
+	case "json":
+		return "application/json; charset=utf-8"
+	case "svg":
+		return "image/svg+xml"
+	case "png":
+		return "image/png"
+	case "jpg", "jpeg":
+		return "image/jpeg"
+	case "webp":
+		return "image/webp"
+	case "ico":
+		return "image/x-icon"
+	case "woff":
+		return "font/woff"
+	case "woff2":
+		return "font/woff2"
+	case "ttf":
+		return "font/ttf"
+	default:
+		return ""
 	}
 }
