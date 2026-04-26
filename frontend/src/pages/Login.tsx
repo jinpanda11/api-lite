@@ -8,14 +8,14 @@ const { Title, Text } = Typography
 
 export default function Login() {
   const navigate = useNavigate()
-  const { setToken, setUser } = useAppStore()
+  const { setLoggedIn, setUser } = useAppStore()
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (values: { username: string; password: string }) => {
     setLoading(true)
     try {
       const res = await login(values.username, values.password)
-      setToken(res.data.token)
+      setLoggedIn(true)
       setUser(res.data.user)
       Toast.success('登录成功')
       navigate('/dashboard')

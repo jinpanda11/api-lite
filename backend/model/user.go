@@ -26,6 +26,7 @@ type User struct {
 	Role         string         `gorm:"size:16;default:user" json:"role"`
 	Balance      float64        `gorm:"default:0" json:"balance"`
 	Status       int            `gorm:"default:1" json:"status"`
+	TokenVersion int            `gorm:"default:0" json:"-"` // incremented to invalidate JWTs
 }
 
 func (u *User) SetPassword(password string) error {
@@ -65,8 +66,11 @@ func GetUserByEmail(email string) (*User, error) {
 	return &user, nil
 }
 
-func (u *User) DeductBalance(amount float64) error {
-	return DB.Model(u).UpdateColumn("balance", gorm.Expr("balance - ?", amount)).Error
+// DeductBalance atomically subtracts amount from balance, only if sufficient.
+// Returns true if the deduction succeeded.
+func (u *User) DeductBalance(amount float64) bool {
+	result := DB.Model(u).Where("balance >= ?", amount).UpdateColumn("balance", gorm.Expr("balance - ?", amount))
+	return result.RowsAffected > 0
 }
 
 func (u *User) AddBalance(amount float64) error {

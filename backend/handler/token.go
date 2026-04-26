@@ -88,6 +88,10 @@ func UpdateToken(c *gin.Context) {
 		updates["remark"] = req.Remark
 	}
 	if req.Status != nil {
+		if *req.Status != 0 && *req.Status != 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "status must be 0 or 1"})
+			return
+		}
 		updates["status"] = *req.Status
 	}
 	if req.ExpiredAt != nil {

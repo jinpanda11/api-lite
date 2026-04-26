@@ -12,15 +12,17 @@ import (
 )
 
 type Claims struct {
-	UserID uint   `json:"uid"`
-	Role   string `json:"role"`
+	UserID       uint   `json:"uid"`
+	Role         string `json:"role"`
+	TokenVersion int    `json:"tv"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(userID uint, role string) (string, error) {
+func GenerateToken(userID uint, role string, tokenVersion int) (string, error) {
 	claims := Claims{
-		UserID: userID,
-		Role:   role,
+		UserID:       userID,
+		Role:         role,
+		TokenVersion: tokenVersion,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(
 				time.Duration(config.C.JWT.ExpireHours) * time.Hour,
@@ -42,22 +44,30 @@ func parseJWT(tokenStr string) (*Claims, error) {
 	return token.Claims.(*Claims), nil
 }
 
-// AuthRequired validates the JWT and injects user into context.
+// AuthRequired validates the JWT (from cookie or Authorization header) and injects user into context.
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "missing authorization header"})
-			return
+		var tokenStr string
+
+		// Prefer HttpOnly cookie (set by SPA login)
+		if cookie, err := c.Cookie("auth_token"); err == nil && cookie != "" {
+			tokenStr = cookie
+		} else {
+			// Fall back to Authorization header (API keys, external clients)
+			authHeader := c.GetHeader("Authorization")
+			if authHeader == "" {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+				return
+			}
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header format"})
+				return
+			}
+			tokenStr = parts[1]
 		}
 
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid authorization header format"})
-			return
-		}
-
-		claims, err := parseJWT(parts[1])
+		claims, err := parseJWT(tokenStr)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid or expired token"})
 			return
@@ -66,6 +76,11 @@ func AuthRequired() gin.HandlerFunc {
 		user, err := model.GetUserByID(claims.UserID)
 		if err != nil || user.Status != model.StatusEnabled {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "user not found or disabled"})
+			return
+		}
+		// Check token version to support revocation (password change, admin disable)
+		if claims.TokenVersion != user.TokenVersion {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token has been revoked"})
 			return
 		}
 

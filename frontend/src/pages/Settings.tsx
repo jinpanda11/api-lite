@@ -46,7 +46,10 @@ export default function Settings() {
   const handleSaveSettings = async () => {
     setSaving(true)
     try {
-      await updateSettings(settings)
+      // Don't send masked sensitive values back
+      const payload = { ...settings }
+      if (payload.smtp_password === '****') delete payload.smtp_password
+      await updateSettings(payload)
       Toast.success('设置已保存')
     } catch {
       // handled by interceptor
@@ -298,7 +301,8 @@ export default function Settings() {
         <Button
           type="danger"
           theme="light"
-          onClick={() => {
+          onClick={async () => {
+            try { await fetch('/api/user/logout', { method: 'POST' }) } catch {}
             logout()
             window.location.href = '/login'
           }}

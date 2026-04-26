@@ -56,11 +56,60 @@ export default function NoticeModal() {
       .catch(() => {})
   }, [])
 
-  // Auto-link bare URLs and add target="_blank" to all links
-  const processContent = (html: string) =>
-    html
-      .replace(/(https?:\/\/[^\s<>"']+)/g, '<a href="$1">$1</a>')
-      .replace(/<a\s/gi, '<a target="_blank" rel="noopener noreferrer" ')
+  // Sanitize HTML: only allow safe tags/attributes, strip everything else
+  const sanitizeHTML = (html: string): string => {
+    const allowedTags = new Set([
+      'b', 'i', 'u', 'strong', 'em', 'a', 'p', 'br', 'ul', 'ol', 'li',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'code', 'pre', 'hr',
+    ])
+    const allowedAttrs = new Set(['href', 'target', 'rel', 'class', 'id'])
+    const uriAttrs = new Set(['href'])
+
+    const div = document.createElement('div')
+    div.innerHTML = html
+
+    const clean = (node: Node): void => {
+      if (node.nodeType === 3) return // text node, keep
+      if (node.nodeType !== 1) {
+        node.parentNode?.removeChild(node)
+        return
+      }
+      const el = node as HTMLElement
+      const tag = el.tagName.toLowerCase()
+      if (!allowedTags.has(tag)) {
+        // Replace with its children
+        while (el.firstChild) {
+          el.parentNode!.insertBefore(el.firstChild, el)
+        }
+        el.parentNode!.removeChild(el)
+        return
+      }
+      // Remove disallowed attributes
+      for (let i = el.attributes.length - 1; i >= 0; i--) {
+        const name = el.attributes[i].name.toLowerCase()
+        if (!allowedAttrs.has(name)) {
+          el.removeAttribute(name)
+        } else if (uriAttrs.has(name)) {
+          const val = el.getAttribute(name) || ''
+          if (/^javascript:/i.test(val) || /^data:/i.test(val)) {
+            el.removeAttribute(name)
+          }
+        }
+      }
+      // Ensure links have rel="noopener noreferrer" and target="_blank"
+      if (tag === 'a') {
+        el.setAttribute('rel', 'noopener noreferrer')
+        el.setAttribute('target', '_blank')
+      }
+      // Recurse (use a copy since children may be removed during iteration)
+      const children = Array.from(el.childNodes)
+      children.forEach(clean)
+    }
+
+    const children = Array.from(div.childNodes)
+    children.forEach(clean)
+    return div.innerHTML
+  }
 
   const current = notices[currentIndex]
 
@@ -121,7 +170,7 @@ export default function NoticeModal() {
               maxHeight: 400,
               overflowY: 'auto',
             }}
-            dangerouslySetInnerHTML={{ __html: processContent(current.content) }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHTML(current.content) }}
           />
         </div>
       )}

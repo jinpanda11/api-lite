@@ -16,11 +16,13 @@ import AdminRedeem from './pages/AdminRedeem'
 import AdminUsers from './pages/AdminUsers'
 import ModelPricing from './pages/ModelPricing'
 import AdminNotice from './pages/AdminNotice'
+import StatusPage from './pages/Status'
 import { getBranding } from './api'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const token = useAppStore((s) => s.token)
-  return token ? <>{children}</> : <Navigate to="/login" replace />
+  const loggedIn = useAppStore((s) => s.loggedIn)
+  if (!loggedIn) return <Navigate to="/login" replace />
+  return <>{children}</>
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {
@@ -32,6 +34,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 const USER_ROUTES = [
   { path: '/dashboard', element: <Dashboard /> },
+  { path: '/status', element: <StatusPage /> },
   { path: '/tokens', element: <Tokens /> },
   { path: '/models', element: <Models /> },
   { path: '/logs', element: <Logs /> },

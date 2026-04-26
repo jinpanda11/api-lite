@@ -49,7 +49,7 @@ export default function Channels() {
   }
 
   const handleToggle = async (ch: Channel) => {
-    await updateChannel(ch.id, { ...ch, status: ch.status === 1 ? 0 : 1 })
+    await updateChannel(ch.id, { status: ch.status === 1 ? 0 : 1 })
     Toast.success(ch.status === 1 ? '已禁用' : '已启用')
     load()
   }
@@ -79,16 +79,17 @@ export default function Channels() {
   const handleSubmit = async (values: any) => {
     setSubmitting(true)
     try {
-      const payload = {
+      const payload: Record<string, any> = {
         name: values.name,
         type: values.type || 'openai',
         base_url: values.base_url,
-        api_key: values.api_key,
         models: values.models || '',
         priority: Number(values.priority) || 0,
         fixed_path: values.fixed_path || '',
-        status: 1,
       }
+      // Only include api_key if provided (editing with empty = keep current)
+      if (values.api_key) payload.api_key = values.api_key
+      if (!editing) payload.status = 1
       if (editing) {
         await updateChannel(editing.id, payload)
         Toast.success('已更新')
@@ -184,7 +185,7 @@ export default function Channels() {
                   name: editing.name,
                   type: editing.type,
                   base_url: editing.base_url,
-                  api_key: editing.api_key,
+                  api_key: '', // Don't pre-fill API key; only send if changed
                   models: editing.models,
                   priority: editing.priority,
                   fixed_path: editing.fixed_path,

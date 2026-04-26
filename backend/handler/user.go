@@ -1,7 +1,9 @@
 package handler
 
 import (
+	"net"
 	"net/http"
+	"new-api-lite/config"
 	"new-api-lite/middleware"
 	"new-api-lite/model"
 	"new-api-lite/service"
@@ -65,6 +67,35 @@ func GetEmailVerificationStatus(c *gin.Context) {
 		enabled = v == "true"
 	}
 	c.JSON(http.StatusOK, gin.H{"enabled": enabled})
+}
+
+// login rate limiter helpers
+
+var (
+	loginAttempts   = map[string]int{}
+	loginAttemptsMu sync.Mutex
+)
+
+func loginRateLimit(ip string) bool {
+	loginAttemptsMu.Lock()
+	defer loginAttemptsMu.Unlock()
+	if count, ok := loginAttempts[ip]; ok && count >= 10 {
+		return false
+	}
+	return true
+}
+
+func loginAttempt(ip string) {
+	loginAttemptsMu.Lock()
+	loginAttempts[ip]++
+	loginAttemptsMu.Unlock()
+	time.AfterFunc(1*time.Minute, func() {
+		loginAttemptsMu.Lock()
+		if loginAttempts[ip] > 0 {
+			loginAttempts[ip]--
+		}
+		loginAttemptsMu.Unlock()
+	})
 }
 
 // Register godoc
@@ -137,6 +168,15 @@ func Register(c *gin.Context) {
 // Login godoc
 // POST /api/user/login
 func Login(c *gin.Context) {
+	ip, _, _ := net.SplitHostPort(c.Request.RemoteAddr)
+	if ip == "" {
+		ip = c.ClientIP()
+	}
+	if !loginRateLimit(ip) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many login attempts, try again later"})
+		return
+	}
+
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
@@ -148,10 +188,12 @@ func Login(c *gin.Context) {
 
 	user, err := model.GetUserByUsername(req.Username)
 	if err != nil {
+		loginAttempt(ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
 	if !user.CheckPassword(req.Password) {
+		loginAttempt(ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
@@ -160,14 +202,22 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	token, err := middleware.GenerateToken(user.ID, user.Role)
+	token, err := middleware.GenerateToken(user.ID, user.Role, user.TokenVersion)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
 	}
 
+	// Set HttpOnly cookie for SPA (XSS can't steal it)
+	expireHours := config.C.JWT.ExpireHours
+	if expireHours <= 0 {
+		expireHours = 168
+	}
+	secure := c.Request.TLS != nil
+	c.SetCookie("auth_token", token, expireHours*3600, "/", "", secure, true)
+
 	c.JSON(http.StatusOK, gin.H{
-		"token": token,
+		"token": token, // kept for API clients that can't use cookies
 		"user": gin.H{
 			"id":       user.ID,
 			"username": user.Username,
@@ -176,6 +226,13 @@ func Login(c *gin.Context) {
 			"balance":  user.Balance,
 		},
 	})
+}
+
+// Logout clears the auth cookie.
+// POST /api/user/logout
+func Logout(c *gin.Context) {
+	c.SetCookie("auth_token", "", -1, "/", "", false, true)
+	c.JSON(http.StatusOK, gin.H{"message": "logged out"})
 }
 
 // GetUserInfo godoc
@@ -217,9 +274,11 @@ func UpdatePassword(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
 		return
 	}
+	// Increment token version to invalidate all existing JWTs
+	user.TokenVersion++
 	if err := model.DB.Save(user).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update password"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "password updated"})
+	c.JSON(http.StatusOK, gin.H{"message": "password updated, all other sessions logged out"})
 }

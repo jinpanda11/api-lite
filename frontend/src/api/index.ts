@@ -22,6 +22,8 @@ export const getEmailVerificationStatus = () =>
 
 export const getUserInfo = () => request.get('/user/info')
 
+export const logout = () => request.post('/user/logout')
+
 export const updatePassword = (old_password: string, new_password: string) =>
   request.post('/user/update-password', { old_password, new_password })
 
@@ -98,6 +100,18 @@ export const getSettings = () => request.get('/admin/settings')
 
 export const updateSettings = (settings: Record<string, string>) =>
   request.put('/admin/settings', { settings })
+
+// ── Status Monitoring ─────────────────────────────────────────────────────
+
+export const getStatus = () => request.get('/status')
+
+export const toggleChannelMonitor = (id: number, monitor_enabled: boolean) =>
+  request.put(`/channel/${id}/monitor`, { monitor_enabled })
+
+export const getMonitorConfig = () => request.get('/admin/monitor-config')
+
+export const updateMonitorConfig = (interval: number) =>
+  request.put('/admin/monitor-config', { interval })
 
 // ── Model Pricing (admin) ──────────────────────────────────────────────────
 

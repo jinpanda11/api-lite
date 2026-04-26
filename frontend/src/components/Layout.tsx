@@ -38,6 +38,7 @@ interface LayoutProps {
 
 const NAV_ITEMS = [
   { itemKey: '/dashboard', text: '仪表板', icon: <IconHome /> },
+  { itemKey: '/status', text: '状态监控', icon: <IconServer /> },
   { itemKey: '/tokens', text: '我的令牌', icon: <IconKey /> },
   { itemKey: '/models', text: '模型市场', icon: <IconApps /> },
   { itemKey: '/logs', text: '使用记录', icon: <IconList /> },
@@ -57,7 +58,7 @@ const ADMIN_NAV_ITEMS = [
 export default function AppLayout({ children }: LayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, theme, setTheme, setUser, logout } = useAppStore()
+  const { user, theme, setTheme, setUser, logout, setLoggedIn } = useAppStore()
   const [branding, setBranding] = useState<Record<string, string>>({})
 
   useEffect(() => {
@@ -66,9 +67,15 @@ export default function AppLayout({ children }: LayoutProps) {
 
   useEffect(() => {
     getUserInfo()
-      .then((res) => setUser(res.data))
-      .catch(() => {})
-  }, [setUser])
+      .then((res) => {
+        setUser(res.data)
+        setLoggedIn(true)
+      })
+      .catch(() => {
+        setLoggedIn(false)
+        navigate('/login')
+      })
+  }, [setUser, setLoggedIn, navigate])
 
   useEffect(() => {
     getBranding()
@@ -87,7 +94,10 @@ export default function AppLayout({ children }: LayoutProps) {
     if (!key.startsWith('divider-')) navigate(key)
   }
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/user/logout', { method: 'POST' })
+    } catch { /* ignore network errors */ }
     logout()
     navigate('/login')
   }

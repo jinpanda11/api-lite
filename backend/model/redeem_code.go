@@ -22,13 +22,15 @@ func GetRedeemCodeByCode(code string) (*RedeemCode, error) {
 	return &rc, nil
 }
 
-func (rc *RedeemCode) MarkUsed(userID uint) error {
+func (rc *RedeemCode) MarkUsed(userID uint) bool {
 	now := time.Now()
-	return DB.Model(rc).Updates(map[string]interface{}{
+	// Atomic: only mark used if still available (prevents double-spending)
+	result := DB.Model(rc).Where("status = 1").Updates(map[string]interface{}{
 		"status":  0,
 		"used_by": userID,
 		"used_at": now,
-	}).Error
+	})
+	return result.RowsAffected > 0
 }
 
 // TopupLog records balance additions for display in wallet history.

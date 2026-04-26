@@ -55,7 +55,12 @@ func Relay(c *gin.Context) {
 	}
 
 	// ── 2. Read and parse request body ──────────────────────────────────────────
-	bodyBytes, err := io.ReadAll(c.Request.Body)
+	const maxBody = 10 << 20 // 10 MB
+	bodyBytes, err := io.ReadAll(io.LimitReader(c.Request.Body, maxBody+1))
+	if len(bodyBytes) > maxBody {
+		c.JSON(http.StatusRequestEntityTooLarge, openAIError("request body too large"))
+		return
+	}
 	if err != nil {
 		c.JSON(http.StatusBadRequest, openAIError("failed to read request body"))
 		return
@@ -93,8 +98,22 @@ func Relay(c *gin.Context) {
 		return
 	}
 
-	// Copy all original headers, then override Authorization with channel key
+	// Copy all original headers, then override Authorization with channel key.
+	// Skip hop-by-hop headers that must not be forwarded.
+	hopByHop := map[string]bool{
+		"connection":          true,
+		"keep-alive":          true,
+		"proxy-authenticate":  true,
+		"proxy-authorization": true,
+		"te":                  true,
+		"trailer":             true,
+		"transfer-encoding":   true,
+		"upgrade":             true,
+	}
 	for k, vs := range c.Request.Header {
+		if hopByHop[strings.ToLower(k)] {
+			continue
+		}
 		for _, v := range vs {
 			req.Header.Add(k, v)
 		}
@@ -243,7 +262,10 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 				totalCost = 0
 			}
 			if totalCost > 0 {
-				_ = user.DeductBalance(totalCost)
+				if !user.DeductBalance(totalCost) {
+					totalCost = 0
+					status = 2
+				}
 			}
 			log := &model.Log{
 				UserID:       user.ID,
@@ -278,7 +300,10 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 	}
 
 	if totalCost > 0 {
-		_ = user.DeductBalance(totalCost)
+		if !user.DeductBalance(totalCost) {
+			totalCost = 0
+			status = 2
+		}
 	}
 
 	log := &model.Log{

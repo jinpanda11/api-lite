@@ -8,6 +8,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+
+// noticeRequest limits which fields can be set during create/update.
+type noticeRequest struct {
+	Title    string `json:"title" binding:"required"`
+	Content  string `json:"content" binding:"required"`
+	Priority int    `json:"priority"`
+}
+
 // ListNotices returns all notices (admin).
 // GET /api/admin/notice
 func ListNotices(c *gin.Context) {
@@ -22,17 +30,22 @@ func ListNotices(c *gin.Context) {
 // CreateNotice creates a notice (admin).
 // POST /api/admin/notice
 func CreateNotice(c *gin.Context) {
-	var req model.Notice
+	var req noticeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-	req.Status = 1
-	if err := model.DB.Create(&req).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	n := model.Notice{
+		Title:    req.Title,
+		Content:  req.Content,
+		Priority: req.Priority,
+		Status:   1,
+	}
+	if err := model.DB.Create(&n).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create notice"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": req})
+	c.JSON(http.StatusOK, gin.H{"data": n})
 }
 
 // UpdateNotice updates a notice (admin).
@@ -44,17 +57,21 @@ func UpdateNotice(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "notice not found"})
 		return
 	}
-	var req model.Notice
+	var req noticeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-	req.ID = notice.ID
-	if err := model.DB.Save(&req).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	updates := map[string]interface{}{
+		"title":    req.Title,
+		"content":  req.Content,
+		"priority": req.Priority,
+	}
+	if err := model.DB.Model(&notice).Updates(updates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update notice"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": req})
+	c.JSON(http.StatusOK, gin.H{"data": notice})
 }
 
 // DeleteNotice deletes a notice (admin).

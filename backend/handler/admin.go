@@ -1,13 +1,14 @@
 package handler
 
 import (
-	"math/rand"
+	"crypto/rand"
+	"math/big"
 	"net/http"
 	"new-api-lite/model"
 	"strconv"
-	"time"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // ListRedeemCodes godoc
@@ -84,6 +85,13 @@ func UpdateUserStatus(c *gin.Context) {
 		return
 	}
 
+	// Verify user exists
+	var target model.User
+	if err := model.DB.First(&target, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
+		return
+	}
+
 	updates := map[string]interface{}{}
 	if req.Status != nil {
 		updates["status"] = *req.Status
@@ -92,7 +100,15 @@ func UpdateUserStatus(c *gin.Context) {
 		updates["balance"] = *req.Balance
 	}
 	if req.Role != "" {
+		if req.Role != "user" && req.Role != "admin" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "role must be 'user' or 'admin'"})
+			return
+		}
 		updates["role"] = req.Role
+	}
+	// If disabling the user, invalidate all their JWTs
+	if req.Status != nil && *req.Status == 0 {
+		updates["token_version"] = gorm.Expr("token_version + 1")
 	}
 	if err := model.DB.Model(&model.User{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -104,10 +120,13 @@ func UpdateUserStatus(c *gin.Context) {
 var codeChars = []rune("ABCDEFGHJKLMNPQRSTUVWXYZ23456789")
 
 func generateCode(n int) string {
-	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	b := make([]rune, n)
 	for i := range b {
-		b[i] = codeChars[r.Intn(len(codeChars))]
+		idx, err := rand.Int(rand.Reader, big.NewInt(int64(len(codeChars))))
+		if err != nil {
+			idx = big.NewInt(0)
+		}
+		b[i] = codeChars[idx.Int64()]
 	}
 	return string(b)
 }

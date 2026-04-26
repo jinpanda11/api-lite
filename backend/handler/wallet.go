@@ -34,9 +34,9 @@ func Redeem(c *gin.Context) {
 	}
 
 	// Mark code as used and add balance atomically
-	if err := rc.MarkUsed(user.ID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to redeem code"})
-		return
+		if !rc.MarkUsed(user.ID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or already used redeem code"})
+			return
 	}
 	if err := user.AddBalance(rc.Value); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add balance"})
@@ -54,7 +54,7 @@ func Redeem(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "redeemed successfully",
 		"amount":  rc.Value,
-		"balance": user.Balance + rc.Value,
+		"balance": user.Balance,
 	})
 }
 

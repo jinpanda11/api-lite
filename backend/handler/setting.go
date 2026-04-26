@@ -23,6 +23,11 @@ func GetBranding(c *gin.Context) {
 	})
 }
 
+// sensitiveKeys holds setting keys that must not be returned in full.
+var sensitiveKeys = map[string]bool{
+	"smtp_password": true,
+}
+
 // GetSettings returns all system settings (admin).
 // GET /api/admin/settings
 func GetSettings(c *gin.Context) {
@@ -33,6 +38,12 @@ func GetSettings(c *gin.Context) {
 	}
 	if _, ok := settings["email_verification_enabled"]; !ok {
 		settings["email_verification_enabled"] = "true"
+	}
+	// Mask sensitive values
+	for k := range settings {
+		if sensitiveKeys[k] && settings[k] != "" {
+			settings[k] = "****"
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"data": settings})
 }

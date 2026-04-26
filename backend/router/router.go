@@ -12,6 +12,7 @@ import (
 )
 
 func Setup(r *gin.Engine, webFS fs.FS) {
+	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS())
 
 	// Serve embedded frontend (SPA) for non-API routes
@@ -39,6 +40,7 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		// User
 		auth.GET("/user/info", handler.GetUserInfo)
 		auth.POST("/user/update-password", handler.UpdatePassword)
+		auth.POST("/user/logout", handler.Logout)
 
 		// Dashboard
 		auth.GET("/dashboard", handler.GetDashboard)
@@ -57,6 +59,9 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 
 		// Logs
 		auth.GET("/log", handler.GetLogs)
+
+		// Status
+		auth.GET("/status", handler.GetStatus)
 
 		// Wallet
 		auth.GET("/balance", handler.GetBalance)
@@ -96,6 +101,17 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		// System settings
 		admin.GET("/admin/settings", handler.GetSettings)
 		admin.PUT("/admin/settings", handler.UpdateSettings)
+
+		// Admin stats
+		admin.GET("/admin/stats", handler.AdminStats)
+
+		// Backup
+		admin.POST("/admin/backup", handler.BackupNow)
+
+		// Channel monitor toggle
+		admin.PUT("/channel/:id/monitor", handler.ToggleChannelMonitor)
+		admin.GET("/admin/monitor-config", handler.GetMonitorConfig)
+		admin.PUT("/admin/monitor-config", handler.UpdateMonitorConfig)
 	}
 
 	// ── Relay: forward all /v1/* to upstream ─────────────────────────────────

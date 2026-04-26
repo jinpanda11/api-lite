@@ -15,6 +15,22 @@ export interface DashboardStats {
   total_cost: number
 }
 
+export interface ModelRank {
+  model: string
+  count: number
+}
+
+export interface DashboardData {
+  stats: DashboardStats
+  trend: DailyCount[]
+  token_count: number
+  balance: number
+  total_users?: number
+  active_channels?: number
+  sys_stats?: DashboardStats
+  top_models?: ModelRank[]
+}
+
 export interface DailyCount {
   date: string
   count: number
@@ -65,6 +81,22 @@ export interface ModelInfo {
   output_price: number
   billing_mode?: string
   call_price?: number
+}
+
+export interface ChannelStatus {
+  model: string
+  channel_name: string
+  channel_id: number
+  online: boolean
+  status_code: number
+  latency_ms: number
+  error?: string
+  checked_at: number
+}
+
+export interface MonitorConfig {
+  interval: number
+  channels: { id: number; name: string; monitor_enabled: boolean }[]
 }
 
 export interface TopupLog {

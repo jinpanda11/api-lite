@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log"
 	"new-api-lite/config"
+	"new-api-lite/handler"
 	"new-api-lite/model"
 	"new-api-lite/router"
 	"os"
@@ -24,17 +25,31 @@ func main() {
 	}
 	config.Load(configPath)
 
+	if config.C.JWT.Secret == "change-me-in-production" || config.C.JWT.Secret == "change-me-in-production-please" {
+		log.Fatalf("[FATAL] JWT secret is set to the default example value. Change it in config.yaml before running in production.")
+	}
+	if len(config.C.JWT.Secret) < 32 {
+		log.Printf("[WARN] JWT secret is only %d characters. Use at least 32 random characters for production.", len(config.C.JWT.Secret))
+	}
+
 	// Init database and auto-migrate
 	model.Init()
 
 	// Seed default admin user if no users exist
 	seedAdmin()
 
+	// Start daily database backup
+	handler.StartAutoBackup()
+
+	// Start channel connectivity monitor
+	handler.StartMonitor()
+
 	// Setup Gin
 	if !config.C.Server.Debug {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.Default()
+	r.MaxMultipartMemory = 8 << 20 // 8 MB
 
 	webFS, err := fs.Sub(webFiles, "web")
 	if err != nil {
@@ -71,5 +86,5 @@ func seedAdmin() {
 		log.Printf("[SEED] failed to create admin user: %v", err)
 		return
 	}
-	log.Printf("[SEED] Created admin user: %s / %s", cfg.Username, cfg.Password)
+	log.Printf("[SEED] Created admin user: %s (password from config)", cfg.Username)
 }

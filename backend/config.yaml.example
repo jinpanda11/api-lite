@@ -21,6 +21,6 @@ smtp:
 
 # First admin user (created automatically on first run if no users exist)
 admin:
-  username: "jinpanda"
-  email: "admin@jinpanda.com"
-  password: "s1059416282"
+  username: "admin"
+  email: "admin@example.com"
+  password: "change-me"

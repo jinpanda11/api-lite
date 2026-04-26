@@ -15,6 +15,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+
+// channelRequest limits which fields can be set during create/update.
+type channelRequest struct {
+	Name      string `json:"name" binding:"required"`
+	Type      string `json:"type"`
+	BaseURL   string `json:"base_url" binding:"required"`
+	APIKey    string `json:"api_key" binding:"required"`
+	Models    string `json:"models"`
+	Priority  int    `json:"priority"`
+	FixedPath string `json:"fixed_path"`
+}
+
 // ListChannels godoc
 // GET /api/channel
 func ListChannels(c *gin.Context) {
@@ -23,22 +35,33 @@ func ListChannels(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": channels})
+	c.JSON(http.StatusOK, gin.H{"data": maskChannels(channels)})
 }
 
 // CreateChannel godoc
 // POST /api/channel
 func CreateChannel(c *gin.Context) {
-	var req model.Channel
+	var req channelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-	if err := model.DB.Create(&req).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	ch := model.Channel{
+		Name:      req.Name,
+		Type:      req.Type,
+		BaseURL:   req.BaseURL,
+		APIKey:    req.APIKey,
+		Models:    req.Models,
+		Priority:  req.Priority,
+		FixedPath: req.FixedPath,
+		Status:    1,
+	}
+	if err := model.DB.Create(&ch).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create channel"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": req})
+	ch.APIKey = maskAPIKey(ch.APIKey)
+	c.JSON(http.StatusOK, gin.H{"data": ch})
 }
 
 // UpdateChannel godoc
@@ -51,17 +74,28 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 
-	var req model.Channel
+	var req channelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
-	req.ID = channel.ID
-	if err := model.DB.Model(&channel).Updates(req).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	updates := map[string]interface{}{
+		"name":       req.Name,
+		"type":       req.Type,
+		"base_url":   req.BaseURL,
+		"models":     req.Models,
+		"priority":   req.Priority,
+		"fixed_path": req.FixedPath,
+	}
+	if req.APIKey != "" {
+		updates["api_key"] = req.APIKey
+	}
+	if err := model.DB.Model(&channel).Updates(updates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update channel"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"data": req})
+	channel.APIKey = maskAPIKey(channel.APIKey)
+	c.JSON(http.StatusOK, gin.H{"data": channel})
 }
 
 // DeleteChannel godoc
@@ -370,6 +404,23 @@ func splitModels(s string) []string {
 		}
 	}
 	return result
+}
+
+// maskAPIKey shows only first 4 and last 4 characters of an API key.
+func maskAPIKey(key string) string {
+	if len(key) <= 8 {
+		return "****"
+	}
+	return key[:4] + "****" + key[len(key)-4:]
+}
+
+func maskChannels(channels []model.Channel) []model.Channel {
+	out := make([]model.Channel, len(channels))
+	for i, ch := range channels {
+		ch.APIKey = maskAPIKey(ch.APIKey)
+		out[i] = ch
+	}
+	return out
 }
 
 func trim(s string) string {

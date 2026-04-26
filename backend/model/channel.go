@@ -18,7 +18,22 @@ type Channel struct {
 	Models    string         `gorm:"size:1024" json:"models"`   // comma-separated model names
 	Priority  int            `gorm:"default:0" json:"priority"` // higher = preferred
 	Status    int            `gorm:"default:1" json:"status"`
-	FixedPath string         `gorm:"size:128" json:"fixed_path"`
+	FixedPath      string         `gorm:"size:128" json:"fixed_path"`
+	MonitorEnabled bool           `gorm:"default:1" json:"monitor_enabled"`
+}
+
+// escapeLike escapes SQL LIKE wildcard characters so they match literally.
+func escapeLike(s string) string {
+	result := make([]byte, 0, len(s)+4)
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '%', '_', '\\':
+			result = append(result, '\\', s[i])
+		default:
+			result = append(result, s[i])
+		}
+	}
+	return string(result)
 }
 
 func GetAvailableChannels() ([]Channel, error) {
@@ -35,7 +50,9 @@ func SelectChannel(model string) (*Channel, error) {
 	var channel Channel
 	query := DB.Where("status = 1")
 	if model != "" {
-		query = query.Where("models = '' OR models LIKE ?", "%"+model+"%")
+		// Escape LIKE wildcards in the model name to prevent unintended matches
+		escaped := escapeLike(model)
+		query = query.Where("models = '' OR models LIKE ?", "%"+escaped+"%")
 	}
 	if err := query.Order("priority desc").First(&channel).Error; err != nil {
 		return nil, err
