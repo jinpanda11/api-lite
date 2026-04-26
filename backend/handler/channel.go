@@ -92,13 +92,12 @@ func TestChannel(c *gin.Context) {
 		return
 	}
 
-	// Test connectivity by calling a suitable endpoint on the upstream
+	// Test connectivity: try /v1/models first, fall back to /v1/chat/completions
 	baseURL := strings.TrimRight(channel.BaseURL, "/")
-	var testMethod, testURL string
+	var testMethod, testURL, fallbackURL string
 	isImage := channel.Type == "image"
 
 	if isImage {
-		// Image APIs expect POST; test the actual endpoint
 		if channel.FixedPath != "" {
 			testURL = baseURL + channel.FixedPath
 		} else {
@@ -106,31 +105,44 @@ func TestChannel(c *gin.Context) {
 		}
 		testMethod = "POST"
 	} else {
-		testURL = baseURL + "/models"
-		if !strings.Contains(baseURL, "/v1") {
-			testURL = baseURL + "/v1/models"
-		}
+		testURL = baseURL + "/v1/models"
+		fallbackURL = baseURL + "/v1/chat/completions"
 		testMethod = "GET"
 	}
 
 	client := &http.Client{Timeout: 15 * time.Second}
-	var testReq *http.Request
-	var err error
-	if testMethod == "POST" {
-		testReq, err = http.NewRequest("POST", testURL, strings.NewReader(`{}`))
-	} else {
-		testReq, err = http.NewRequest("GET", testURL, nil)
-	}
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build request: " + err.Error()})
-		return
-	}
-	testReq.Header.Set("Authorization", "Bearer "+channel.APIKey)
-	testReq.Header.Set("Content-Type", "application/json")
 
-	start := time.Now()
-	resp, err := client.Do(testReq)
-	elapsed := time.Since(start).Milliseconds()
+	doTest := func(url, method string, body io.Reader) (int, string, int64, error) {
+		var req *http.Request
+		var err error
+		if method == "POST" {
+			req, err = http.NewRequest("POST", url, body)
+		} else {
+			req, err = http.NewRequest("GET", url, nil)
+		}
+		if err != nil {
+			return 0, "", 0, err
+		}
+		req.Header.Set("Authorization", "Bearer "+channel.APIKey)
+		req.Header.Set("Content-Type", "application/json")
+
+		start := time.Now()
+		resp, err := client.Do(req)
+		elapsed := time.Since(start).Milliseconds()
+		if err != nil {
+			return 0, "", elapsed, err
+		}
+		defer resp.Body.Close()
+
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyStr := string(bodyBytes)
+		if len(bodyStr) > 500 {
+			bodyStr = bodyStr[:500] + "..."
+		}
+		return resp.StatusCode, bodyStr, elapsed, nil
+	}
+
+	statusCode, bodyStr, elapsed, err := doTest(testURL, testMethod, strings.NewReader(`{}`))
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{
 			"error":   "connection failed: " + err.Error(),
@@ -140,20 +152,37 @@ func TestChannel(c *gin.Context) {
 		})
 		return
 	}
-	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp.Body)
-	bodyStr := string(body)
-	if len(bodyStr) > 500 {
-		bodyStr = bodyStr[:500] + "..."
+	// If primary test returned 404 and we have a fallback, retry with chat completions
+	usedFallback := false
+	if statusCode == 404 && fallbackURL != "" {
+		fallbackBody := strings.NewReader(`{"model":"gpt-3.5-turbo","messages":[{"role":"user","content":"hi"}],"max_tokens":1}`)
+		fbStatus, fbBody, fbElapsed, fbErr := doTest(fallbackURL, "POST", fallbackBody)
+		if fbErr != nil {
+			c.JSON(http.StatusBadGateway, gin.H{
+				"error":   "connection failed (fallback): " + fbErr.Error(),
+				"channel": channel.Name,
+				"url":     fallbackURL,
+				"elapsed": fbElapsed,
+			})
+			return
+		}
+		statusCode = fbStatus
+		bodyStr = fbBody
+		elapsed = fbElapsed
+		usedFallback = true
 	}
 
-	if resp.StatusCode >= 400 && !isImage {
+	if statusCode >= 400 && !isImage {
+		errMsg := "upstream returned " + strconv.Itoa(statusCode)
+		if usedFallback {
+			errMsg = "upstream returned " + strconv.Itoa(statusCode) + " (tried /v1/models and /v1/chat/completions)"
+		}
 		c.JSON(http.StatusBadGateway, gin.H{
-			"error":      "upstream returned " + strconv.Itoa(resp.StatusCode),
+			"error":      errMsg,
 			"channel":    channel.Name,
 			"url":        testURL,
-			"status":     resp.StatusCode,
+			"status":     statusCode,
 			"response":   bodyStr,
 			"elapsed_ms": elapsed,
 		})
@@ -162,19 +191,27 @@ func TestChannel(c *gin.Context) {
 
 	// For image channels, any response (even 4xx) means the server is reachable.
 	msg := "connection ok"
-	if isImage && resp.StatusCode >= 400 {
-		if resp.StatusCode == 404 && channel.FixedPath == "" {
-			msg = fmt.Sprintf("server reachable, but /v1/images/generations not found — set a fixed path for this channel")
+	if usedFallback {
+		msg = "connection ok (via /v1/chat/completions fallback; /v1/models not available)"
+	}
+	if isImage && statusCode >= 400 {
+		if statusCode == 404 && channel.FixedPath == "" {
+			msg = "server reachable, but /v1/images/generations not found — set a fixed path for this channel"
 		} else {
-			msg = fmt.Sprintf("connection ok (upstream returned %d)", resp.StatusCode)
+			msg = fmt.Sprintf("connection ok (upstream returned %d)", statusCode)
 		}
+	}
+
+	displayURL := testURL
+	if usedFallback {
+		displayURL = fallbackURL
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":    msg,
 		"channel":    channel.Name,
-		"url":        testURL,
-		"status":     resp.StatusCode,
+		"url":        displayURL,
+		"status":     statusCode,
 		"elapsed_ms": elapsed,
 		"models":     bodyStr,
 	})
