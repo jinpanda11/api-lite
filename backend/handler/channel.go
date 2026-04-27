@@ -438,31 +438,8 @@ func trim(s string) string {
 }
 
 // OpenAIModelsList returns the model list in OpenAI-compatible format.
-// GET /v1/models — uses API key auth (same as relay) so CherryStudio etc can list models.
+// GET /v1/models — auth is optional; when called from Relay the caller has already authenticated.
 func OpenAIModelsList(c *gin.Context) {
-	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		c.JSON(http.StatusUnauthorized, openAIError("missing Authorization header"))
-		return
-	}
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		c.JSON(http.StatusUnauthorized, openAIError("invalid Authorization header format"))
-		return
-	}
-
-	dbToken, err := model.GetTokenByKey(parts[1])
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, openAIError("invalid or expired API key"))
-		return
-	}
-
-	user, err := model.GetUserByID(dbToken.UserID)
-	if err != nil || user.Status != model.StatusEnabled {
-		c.JSON(http.StatusUnauthorized, openAIError("user not found or disabled"))
-		return
-	}
-
 	channels, err := model.GetAvailableChannels()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, openAIError("failed to load channels"))

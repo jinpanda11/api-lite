@@ -17,6 +17,12 @@ import (
 // Relay is the core proxy handler for all /v1/* endpoints.
 // Flow: validate token → select channel → forward request → record log → return response
 func Relay(c *gin.Context) {
+	// ── Handle /v1/models without auth (connectivity checks, model discovery) ──
+	if c.Param("path") == "/models" && c.GetHeader("Authorization") == "" {
+		OpenAIModelsList(c)
+		return
+	}
+
 	// ── 1. Extract and validate the API token ──────────────────────────────────
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
