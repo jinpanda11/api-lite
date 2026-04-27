@@ -82,6 +82,8 @@ export const deleteNotice = (id: number) => request.delete(`/admin/notice/${id}`
 
 export const getLogs = (params?: object) => request.get('/log', { params })
 
+export const getDailyCosts = () => request.get('/admin/daily-costs')
+
 // ── Wallet ────────────────────────────────────────────────────────────────
 
 export const getBalance = () => request.get('/balance')

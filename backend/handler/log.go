@@ -99,6 +99,24 @@ func GetDashboard(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+// DailyCost represents aggregated cost for a single day.
+type DailyCost struct {
+	Date         string  `json:"date"`
+	TotalCost    float64 `json:"total_cost"`
+	RequestCount int64   `json:"request_count"`
+}
+
+// GetDailyCosts godoc
+// GET /api/admin/daily-costs — daily aggregated consumption
+func GetDailyCosts(c *gin.Context) {
+	var rows []DailyCost
+	model.DB.Model(&model.Log{}).
+		Select("DATE(created_at) as date, COALESCE(SUM(cost),0) as total_cost, COUNT(*) as request_count").
+		Group("DATE(created_at)").Order("date desc").Limit(30).
+		Scan(&rows)
+	c.JSON(http.StatusOK, gin.H{"data": rows})
+}
+
 // AdminStats godoc
 // GET /api/admin/stats — system-wide usage statistics
 func AdminStats(c *gin.Context) {

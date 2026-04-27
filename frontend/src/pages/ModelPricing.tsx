@@ -22,6 +22,7 @@ const { Title, Text } = Typography
 interface PricingConfig {
   id: number
   model_name: string
+  icon_url: string
   billing_mode: 'token' | 'call'
   input_price: number
   output_price: number
@@ -85,6 +86,7 @@ export default function ModelPricing() {
         : {
             id: 0,
             model_name: modelName,
+            icon_url: '',
             billing_mode: 'token',
             input_price: 0,
             output_price: 0,
@@ -112,6 +114,29 @@ export default function ModelPricing() {
   }
 
   const columns = [
+    {
+      title: '图标',
+      render: (_: any, row: ModelInfo) => {
+        const p = pricingMap.get(row.id)
+        const url = p?.icon_url
+        return url ? (
+          <img
+            src={url}
+            alt={row.id}
+            style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover' }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+        ) : (
+          <div style={{
+            width: 28, height: 28, borderRadius: 6, background: 'var(--semi-color-fill-0)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--semi-color-text-2)',
+          }}>
+            {row.id.charAt(0).toUpperCase()}
+          </div>
+        )
+      },
+      width: 60,
+    },
     {
       title: '模型名称',
       dataIndex: 'id',
@@ -196,6 +221,26 @@ export default function ModelPricing() {
       >
         {editingPricing ? (
           <div>
+            <div style={{ marginBottom: 20 }}>
+              <Text style={{ display: 'block', marginBottom: 8, fontWeight: 500, fontSize: 14 }}>模型图标</Text>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <Input
+                  value={editingPricing.icon_url}
+                  onChange={(v) => setEditingPricing({ ...editingPricing, icon_url: v })}
+                  placeholder="https://example.com/icon.png"
+                  style={{ flex: 1 }}
+                />
+                {editingPricing.icon_url && (
+                  <img
+                    src={editingPricing.icon_url}
+                    alt="preview"
+                    style={{ width: 36, height: 36, borderRadius: 8, objectFit: 'cover', border: '1px solid var(--semi-color-border)' }}
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                )}
+              </div>
+            </div>
+
             <div style={{ marginBottom: 20 }}>
               <Text style={{ display: 'block', marginBottom: 8, fontWeight: 500, fontSize: 14 }}>计费方式</Text>
               <RadioGroup

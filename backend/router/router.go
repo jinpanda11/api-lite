@@ -105,6 +105,7 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 
 		// Admin stats
 		admin.GET("/admin/stats", handler.AdminStats)
+		admin.GET("/admin/daily-costs", handler.GetDailyCosts)
 
 		// Backup
 		admin.POST("/admin/backup", handler.BackupNow)
