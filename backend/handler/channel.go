@@ -1,4 +1,4 @@
-package handler
+﻿package handler
 
 import (
 	"encoding/json"
@@ -267,6 +267,7 @@ func ListModels(c *gin.Context) {
 		OutputPrice  float64 `json:"output_price"`
 		BillingMode  string  `json:"billing_mode,omitempty"`
 		CallPrice    float64 `json:"call_price,omitempty"`
+		IconURL      string  `json:"icon_url,omitempty"`
 	}
 
 	// Fetch upstream models for channels with empty model list
@@ -288,7 +289,7 @@ func ListModels(c *gin.Context) {
 				if _, loaded := seen.LoadOrStore(key, true); loaded {
 					continue
 				}
-				inP, outP, bm, cp := getModelPricing(m)
+				inP, outP, bm, cp, icon := getModelPricing(m)
 				models = append(models, ModelInfo{
 					ID:          m,
 					ChannelName: ch.Name,
@@ -296,6 +297,7 @@ func ListModels(c *gin.Context) {
 					OutputPrice: outP,
 					BillingMode: bm,
 					CallPrice:   cp,
+				IconURL:     icon,
 				})
 			}
 		} else {
@@ -310,7 +312,7 @@ func ListModels(c *gin.Context) {
 					if _, loaded := seen.LoadOrStore(key, true); loaded {
 						continue
 					}
-					inP, outP, bm, cp := getModelPricing(m)
+					inP, outP, bm, cp, icon := getModelPricing(m)
 					models = append(models, ModelInfo{
 						ID:          m,
 						ChannelName: ch.Name,
@@ -318,6 +320,7 @@ func ListModels(c *gin.Context) {
 						OutputPrice: outP,
 						BillingMode: bm,
 						CallPrice:   cp,
+						IconURL:     icon,
 					})
 				}
 				mu.Unlock()
@@ -377,10 +380,11 @@ func fetchUpstreamModels(ch model.Channel) []string {
 }
 
 // getModelPricing returns effective pricing for a model from global ModelPricing table.
-func getModelPricing(modelName string) (inputPrice, outputPrice float64, billingMode string, callPrice float64) {
+func getModelPricing(modelName string) (inputPrice, outputPrice float64, billingMode string, callPrice float64, iconURL string) {
 	var mp model.ModelPricing
 	if err := model.DB.Where("model_name = ?", modelName).First(&mp).Error; err == nil {
 		billingMode = mp.BillingMode
+		iconURL = mp.IconURL
 		if billingMode == "call" {
 			callPrice = mp.CallPrice
 		} else {
@@ -479,7 +483,7 @@ func OpenAIModelsList(c *gin.Context) {
 			if m == "" {
 				continue
 			}
-			inP, outP, bm, cp := getModelPricing(m)
+			inP, outP, bm, cp, icon := getModelPricing(m)
 			result = append(result, gin.H{
 				"id":           m,
 				"object":       "model",
@@ -489,6 +493,7 @@ func OpenAIModelsList(c *gin.Context) {
 				"output_price": outP,
 				"billing_mode": bm,
 				"call_price":   cp,
+				"icon_url":    icon,
 			})
 		}
 	}

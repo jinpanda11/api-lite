@@ -81,6 +81,7 @@ export interface ModelInfo {
   output_price: number
   billing_mode?: string
   call_price?: number
+  icon_url?: string
 }
 
 export interface ChannelStatus {

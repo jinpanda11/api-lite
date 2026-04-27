@@ -29,6 +29,28 @@ export default function Models() {
 
   const columns = [
     {
+      title: '图标',
+      render: (_: any, row: ModelInfo) => {
+        const url = row.icon_url
+        return url ? (
+          <img
+            src={url}
+            alt={row.id}
+            style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover' }}
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+        ) : (
+          <div style={{
+            width: 28, height: 28, borderRadius: 6, background: 'var(--semi-color-fill-0)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: 'var(--semi-color-text-2)',
+          }}>
+            {row.id.charAt(0).toUpperCase()}
+          </div>
+        )
+      },
+      width: 60,
+    },
+    {
       title: '模型 ID',
       dataIndex: 'id',
       render: (id: string) => <Text code>{id}</Text>,
