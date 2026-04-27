@@ -16,10 +16,11 @@ func GetBranding(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"site_name":    settings["site_name"],
-		"site_logo":    settings["site_logo"],
-		"site_title":   settings["site_title"],
-		"site_favicon": settings["site_favicon"],
+		"site_name":           settings["site_name"],
+		"site_logo":           settings["site_logo"],
+		"site_title":          settings["site_title"],
+		"site_favicon":        settings["site_favicon"],
+		"redeem_purchase_url": settings["redeem_purchase_url"],
 	})
 }
 

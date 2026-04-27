@@ -181,6 +181,20 @@ export default function Settings() {
                 />
               </div>
 
+              {/* Redeem Purchase URL */}
+              <div style={{ marginTop: 24, marginBottom: 24 }}>
+                <Text strong>购买兑换码链接</Text>
+                <Text type="tertiary" style={{ display: 'block', fontSize: 12, marginBottom: 8 }}>
+                  用户在钱包页面点击「购买兑换码」时跳转的链接
+                </Text>
+                <Input
+                  placeholder="https://example.com/buy"
+                  value={settings['redeem_purchase_url'] || ''}
+                  onChange={(v) => updateSetting('redeem_purchase_url', v)}
+                  style={{ width: '100%' }}
+                />
+              </div>
+
               <Divider />
 
               {/* SMTP Configuration */}

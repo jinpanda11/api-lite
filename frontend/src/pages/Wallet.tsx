@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { Typography, Card, Button, Input, Table, Toast, Divider } from '@douyinfe/semi-ui'
-import { getBalance, redeemCode, getTopupLogs } from '../api'
+import { getBalance, redeemCode, getTopupLogs, getBranding } from '../api'
 import { useAppStore } from '../store'
 import type { TopupLog } from '../types'
 
@@ -12,6 +12,7 @@ export default function Wallet() {
   const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
   const [logs, setLogs] = useState<TopupLog[]>([])
+  const [purchaseUrl, setPurchaseUrl] = useState('')
 
   const loadData = useCallback(() => {
     getBalance().then((res) => setBalance(res.data.balance))
@@ -19,6 +20,12 @@ export default function Wallet() {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  useEffect(() => {
+    getBranding()
+      .then((res) => setPurchaseUrl(res.data.redeem_purchase_url || ''))
+      .catch(() => {})
+  }, [])
 
   const handleRedeem = async () => {
     if (!code.trim()) {
@@ -60,16 +67,26 @@ export default function Wallet() {
       </Card>
 
       <Card title="兑换充值码" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'flex', gap: 12, maxWidth: 500 }}>
+        <div style={{ display: 'flex', gap: 12, maxWidth: 560 }}>
           <Input
             value={code}
             onChange={(v) => setCode(v)}
             placeholder="输入兑换码"
             onEnterPress={handleRedeem}
+            style={{ flex: 1 }}
           />
           <Button type="primary" theme="solid" loading={loading} onClick={handleRedeem}>
             兑换
           </Button>
+          {purchaseUrl && (
+            <Button
+              type="tertiary"
+              theme="solid"
+              onClick={() => window.open(purchaseUrl, '_blank')}
+            >
+              购买兑换码
+            </Button>
+          )}
         </div>
       </Card>
 

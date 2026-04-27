@@ -82,7 +82,8 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		// Redeem code management
 		admin.GET("/admin/redeem", handler.ListRedeemCodes)
 		admin.POST("/admin/redeem", handler.CreateRedeemCodes)
-		admin.DELETE("/admin/redeem/:id", handler.DeleteRedeemCode)
+		admin.DELETE("/admin/redeem/used", handler.DeleteUsedRedeemCodes)
+			admin.DELETE("/admin/redeem/:id", handler.DeleteRedeemCode)
 
 		// User management
 		admin.GET("/admin/user", handler.ListUsers)

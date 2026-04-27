@@ -58,6 +58,13 @@ func DeleteRedeemCode(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
+// DeleteUsedRedeemCodes godoc
+// DELETE /api/admin/redeem/used
+func DeleteUsedRedeemCodes(c *gin.Context) {
+	result := model.DB.Where("status != 1").Delete(&model.RedeemCode{})
+	c.JSON(http.StatusOK, gin.H{"message": "deleted", "count": result.RowsAffected})
+}
+
 // ListUsers godoc
 // GET /api/admin/user
 func ListUsers(c *gin.Context) {

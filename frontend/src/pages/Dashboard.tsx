@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Card, Row, Col, Typography, Spin, Tag, Table } from '@douyinfe/semi-ui'
+import { Card, Row, Col, Typography, Spin, Tag, Table, Modal, Button, Banner } from '@douyinfe/semi-ui'
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,8 +11,9 @@ import {
   Filler,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
-import { getDashboard } from '../api'
+import { getDashboard, getNotices } from '../api'
 import type { DashboardData, DailyCount } from '../types'
+import type { NoticeItem } from '../components/NoticeModal'
 import { useAppStore } from '../store'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ChartTitle, Tooltip, Filler)
@@ -40,6 +41,8 @@ export default function Dashboard() {
   const theme = useAppStore((s) => s.theme)
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [notices, setNotices] = useState<NoticeItem[]>([])
+  const [noticeDetail, setNoticeDetail] = useState<NoticeItem | null>(null)
   const isAdmin = user?.role === 'admin'
 
   useEffect(() => {
@@ -47,6 +50,45 @@ export default function Dashboard() {
       .then((res) => setData(res.data))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    getNotices()
+      .then((res) => setNotices((res.data.data ?? []) as NoticeItem[]))
+      .catch(() => {})
+  }, [])
+
+  const sanitizeHTML = (html: string): string => {
+    const allowedTags = new Set([
+      'b', 'i', 'u', 'strong', 'em', 'a', 'p', 'br', 'ul', 'ol', 'li',
+      'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'div', 'blockquote', 'code', 'pre', 'hr',
+    ])
+    const allowedAttrs = new Set(['href', 'target', 'rel', 'class', 'id'])
+    const div = document.createElement('div')
+    div.innerHTML = html
+    const clean = (node: Node): void => {
+      if (node.nodeType === 3) return
+      if (node.nodeType !== 1) { node.parentNode?.removeChild(node); return }
+      const el = node as HTMLElement
+      const tag = el.tagName.toLowerCase()
+      if (!allowedTags.has(tag)) {
+        while (el.firstChild) el.parentNode!.insertBefore(el.firstChild, el)
+        el.parentNode!.removeChild(el)
+        return
+      }
+      for (let i = el.attributes.length - 1; i >= 0; i--) {
+        const name = el.attributes[i].name.toLowerCase()
+        if (!allowedAttrs.has(name)) { el.removeAttribute(name) }
+        else if (name === 'href') {
+          const val = el.getAttribute('href') || ''
+          if (/^javascript:/i.test(val) || /^data:/i.test(val)) el.removeAttribute('href')
+        }
+      }
+      if (tag === 'a') { el.setAttribute('rel', 'noopener noreferrer'); el.setAttribute('target', '_blank') }
+      Array.from(el.childNodes).forEach(clean)
+    }
+    Array.from(div.childNodes).forEach(clean)
+    return div.innerHTML
+  }
 
   const trend = data?.trend ?? []
   const lineColor = '#6366f1'
@@ -94,6 +136,16 @@ export default function Dashboard() {
   return (
     <div>
       <Title heading={4} style={{ marginBottom: 24 }}>仪表板</Title>
+
+      {notices.length > 0 && (
+        <div onClick={() => setNoticeDetail(notices[0])} style={{ cursor: 'pointer', marginBottom: 16 }}>
+          <Banner
+            type="info"
+            title={notices[0].title}
+            description={notices[0].content.replace(/<[^>]*>/g, '').slice(0, 80) + (notices[0].content.length > 80 ? '...' : '')}
+          />
+        </div>
+      )}
 
       <Row gutter={[16, 16]}>
         <Col xs={24} sm={12} lg={6}>
@@ -169,6 +221,21 @@ export default function Dashboard() {
           </Col>
         )}
       </Row>
+
+      <Modal
+        title={noticeDetail?.title || '公告'}
+        visible={noticeDetail !== null}
+        onCancel={() => setNoticeDetail(null)}
+        footer={<Button type="primary" onClick={() => setNoticeDetail(null)}>关闭</Button>}
+        width={560}
+      >
+        {noticeDetail && (
+          <div
+            style={{ lineHeight: 1.8, fontSize: 14, maxHeight: 400, overflowY: 'auto' }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHTML(noticeDetail.content) }}
+          />
+        )}
+      </Modal>
     </div>
   )
 }
