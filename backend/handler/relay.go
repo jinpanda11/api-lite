@@ -74,6 +74,17 @@ func Relay(c *gin.Context) {
 	modelName := extractModel(bodyBytes, c.Param("path"))
 	isStream := isStreamRequest(bodyBytes)
 
+	// ── Anthropic format detection: /v1/messages → convert to OpenAI ────
+	isAnthropicPath := c.Param("path") == "/messages"
+	if isAnthropicPath {
+		convertedBody, err := anthropicToOpenAI(bodyBytes)
+		if err == nil {
+			bodyBytes = convertedBody
+			// Re-extract model from converted body
+			modelName = extractModel(bodyBytes, "/chat/completions")
+		}
+	}
+
 	// ── 3. Select upstream channel ───────────────────────────────────────────────
 	channel, err := model.SelectChannel(modelName)
 	if err != nil {
@@ -93,7 +104,11 @@ func Relay(c *gin.Context) {
 	} else {
 		baseURL := strings.TrimRight(channel.BaseURL, "/")
 		baseURL = strings.TrimSuffix(baseURL, "/v1")
-		upstreamURL = baseURL + c.Request.URL.Path
+		if isAnthropicPath {
+			upstreamURL = baseURL + "/v1/chat/completions"
+		} else {
+			upstreamURL = baseURL + c.Request.URL.Path
+		}
 		if c.Request.URL.RawQuery != "" {
 			upstreamURL += "?" + c.Request.URL.RawQuery
 		}
