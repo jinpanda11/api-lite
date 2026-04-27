@@ -24,17 +24,15 @@ func Relay(c *gin.Context) {
 	}
 
 	// ── 1. Extract and validate the API token ──────────────────────────────────
-	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		c.JSON(http.StatusUnauthorized, openAIError("missing Authorization header"))
+	// Accept both "Authorization: Bearer <key>" (OpenAI) and "x-api-key: <key>" (Anthropic)
+	apiKey := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
+	if apiKey == c.GetHeader("Authorization") { // no Bearer prefix found
+		apiKey = c.GetHeader("x-api-key")
+	}
+	if apiKey == "" {
+		c.JSON(http.StatusUnauthorized, openAIError("missing API key (use Authorization: Bearer or x-api-key)"))
 		return
 	}
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		c.JSON(http.StatusUnauthorized, openAIError("invalid Authorization header format"))
-		return
-	}
-	apiKey := parts[1]
 
 	dbToken, err := model.GetTokenByKey(apiKey)
 	if err != nil {
