@@ -180,7 +180,9 @@ func Relay(c *gin.Context) {
 
 
 	// ──── 7. Handle response (stream vs non-stream) ────────────────
-	if isStream {
+	if isAnthropicPath && !isStream {
+		handleAnthropicNonStream(c, resp, user, dbToken, channel, modelName, startTime)
+	} else if isStream {
 		handleStream(c, resp, user, dbToken, channel, modelName, startTime)
 	} else if isImageChannel && isSSE {
 		handleSSENonStream(c, resp, user, dbToken, channel, modelName, startTime)
