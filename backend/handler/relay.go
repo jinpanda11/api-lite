@@ -80,6 +80,7 @@ func Relay(c *gin.Context) {
 		convertedBody, err := anthropicToOpenAI(bodyBytes)
 		if err == nil {
 			bodyBytes = convertedBody
+			isStream = false // force non-stream for Anthropic → OpenAI path
 			// Re-extract model from converted body
 			modelName = extractModel(bodyBytes, "/chat/completions")
 		}
