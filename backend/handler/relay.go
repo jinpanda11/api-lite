@@ -18,7 +18,7 @@ import (
 // Flow: validate token → select channel → forward request → record log → return response
 func Relay(c *gin.Context) {
 	// ── Handle /v1/models without auth (connectivity checks, model discovery) ──
-	if c.Param("path") == "/models" && c.GetHeader("Authorization") == "" {
+	if c.Param("path") == "/models" {
 		OpenAIModelsList(c)
 		return
 	}
