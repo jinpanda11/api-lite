@@ -1,6 +1,6 @@
 services:
   api-lite:
-    image: ghcr.io/jinpanda11/api-lite:latest
+    build: .
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -8,3 +8,4 @@ services:
       - ./backend:/app/data
     environment:
       - GIN_MODE=release
+      - CONFIG_PATH=/app/data/config.yaml
