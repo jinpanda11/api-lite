@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/base64"
 	"fmt"
 	"bufio"
 	"bytes"
@@ -106,20 +107,35 @@ func Relay(c *gin.Context) {
 
 
 	// ── 2. Read and parse request body ──────────────────────────────────────────
-	const maxBody = 10 << 20 // 10 MB
-	bodyBytes, err := io.ReadAll(io.LimitReader(c.Request.Body, maxBody+1))
-	if len(bodyBytes) > maxBody {
-		c.JSON(http.StatusRequestEntityTooLarge, openAIError("request body too large"))
-		return
-	}
-	if err != nil {
-		c.JSON(http.StatusBadRequest, openAIError("failed to read request body"))
-		return
-	}
+	const maxBody = 32 << 20 // 32 MB (accommodates image uploads)
+	contentType := c.GetHeader("Content-Type")
+	isMultipart := strings.HasPrefix(contentType, "multipart/form-data")
 
-	// Extract model name for channel selection and billing
-	modelName := extractModel(bodyBytes, c.Param("path"))
-	isStream := isStreamRequest(bodyBytes)
+	var bodyBytes []byte
+	var modelName string
+	var isStream bool
+
+	if isMultipart {
+		bodyBytes, modelName, isStream, err = parseMultipartToJSON(c)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, openAIError("failed to parse multipart form: " + err.Error()))
+			return
+		}
+	} else {
+		bodyBytes, err = io.ReadAll(io.LimitReader(c.Request.Body, maxBody+1))
+		if len(bodyBytes) > maxBody {
+			c.JSON(http.StatusRequestEntityTooLarge, openAIError("request body too large"))
+			return
+		}
+		if err != nil {
+			c.JSON(http.StatusBadRequest, openAIError("failed to read request body"))
+			return
+		}
+
+		// Extract model name for channel selection and billing
+		modelName = extractModel(bodyBytes, c.Param("path"))
+		isStream = isStreamRequest(bodyBytes)
+	}
 
 	// ── Anthropic format detection: /v1/messages → convert to OpenAI ────
 	isAnthropicPath := c.Param("path") == "/messages"
@@ -228,7 +244,7 @@ func Relay(c *gin.Context) {
 	// ── 6. Copy response headers to client ───────────────────────────────────────
 
 	isImageChannel := channel.Type == "image"
-		contentType := resp.Header.Get("Content-Type")
+		contentType = resp.Header.Get("Content-Type")
 	isSSE := strings.Contains(contentType, "text/event-stream")
 
 		if isImageChannel && !isSSE {
@@ -577,6 +593,72 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": []gin.H{}})
 	go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
 		http.StatusOK, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
+}
+
+
+// parseMultipartToJSON converts a multipart/form-data request (used by /v1/images/edits)
+// into a JSON body suitable for forwarding to the upstream API.
+func parseMultipartToJSON(c *gin.Context) ([]byte, string, bool, error) {
+	if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
+		return nil, "", false, err
+	}
+
+	model := c.Request.FormValue("model")
+	prompt := c.Request.FormValue("prompt")
+	n := c.Request.FormValue("n")
+	size := c.Request.FormValue("size")
+	responseFormat := c.Request.FormValue("response_format")
+
+	body := map[string]any{
+		"model":  model,
+		"prompt": prompt,
+	}
+	if n != "" {
+		body["n"] = n
+	}
+	if size != "" {
+		body["size"] = size
+	}
+	if responseFormat != "" {
+		body["response_format"] = responseFormat
+	}
+
+	// image field: try file upload first, fall back to form value (URL string)
+	imageFile, header, _ := c.Request.FormFile("image")
+	if imageFile != nil {
+		imageData, err := io.ReadAll(imageFile)
+		imageFile.Close()
+		if err == nil && len(imageData) > 0 {
+			mimeType := header.Header.Get("Content-Type")
+			if mimeType == "" {
+				mimeType = http.DetectContentType(imageData)
+			}
+			body["image"] = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(imageData)
+		}
+	} else if imageURL := c.Request.FormValue("image"); imageURL != "" {
+		body["image"] = imageURL
+	}
+
+	// mask field: optional mask image for inpainting
+	maskFile, maskHeader, _ := c.Request.FormFile("mask")
+	if maskFile != nil {
+		maskData, err := io.ReadAll(maskFile)
+		maskFile.Close()
+		if err == nil && len(maskData) > 0 {
+			mimeType := maskHeader.Header.Get("Content-Type")
+			if mimeType == "" {
+				mimeType = http.DetectContentType(maskData)
+			}
+			body["mask"] = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(maskData)
+		}
+	}
+
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, "", false, err
+	}
+
+	return jsonBody, model, false, nil
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
