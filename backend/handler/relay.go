@@ -9,10 +9,62 @@ import (
 	"net/http"
 	"new-api-lite/model"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// ── Idempotency cache ──────────────────────────────────────────────────────
+
+type idempotencyEntry struct {
+	statusCode  int
+	contentType string
+	body        []byte
+	createdAt   time.Time
+}
+
+type idempotencyCacheStruct struct {
+	mu    sync.RWMutex
+	items map[string]*idempotencyEntry
+}
+
+var idemCache = &idempotencyCacheStruct{
+	items: make(map[string]*idempotencyEntry),
+}
+
+func init() {
+	go func() {
+		for {
+			time.Sleep(2 * time.Minute)
+			idemCache.mu.Lock()
+			now := time.Now()
+			for k, v := range idemCache.items {
+				if now.Sub(v.createdAt) > 5*time.Minute {
+					delete(idemCache.items, k)
+				}
+			}
+			idemCache.mu.Unlock()
+		}
+	}()
+}
+
+func (c *idempotencyCacheStruct) get(key string) *idempotencyEntry {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	e, ok := c.items[key]
+	if !ok || time.Since(e.createdAt) > 5*time.Minute {
+		return nil
+	}
+	return e
+}
+
+func (c *idempotencyCacheStruct) set(key string, e *idempotencyEntry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.items[key] = e
+}
+
 
 // Relay is the core proxy handler for all /v1/* endpoints.
 // Flow: validate token → select channel → forward request → record log → return response
@@ -52,7 +104,7 @@ func Relay(c *gin.Context) {
 		return
 	}
 
-	// ── Check balance ──────────────────────────────────────────────────────────────
+
 	if user.Balance <= 0 {
 		c.JSON(http.StatusPaymentRequired, openAIError("insufficient balance, please top up"))
 		return
@@ -80,49 +132,37 @@ func Relay(c *gin.Context) {
 		convertedBody, err := anthropicToOpenAI(bodyBytes)
 		if err == nil {
 			bodyBytes = convertedBody
-			isStream = false // force non-stream for Anthropic → OpenAI path
 			// Re-extract model from converted body
 			modelName = extractModel(bodyBytes, "/chat/completions")
 		}
 	}
 
-	// ── 3. Select upstream channel ───────────────────────────────────────────────
-	channel, err := model.SelectChannel(modelName)
-	if err != nil {
+	// ── Idempotency check ───────────────────────────────────────────────────
+	idempotencyKey := c.GetHeader("X-Idempotency-Key")
+	c.Set("idempotencyKey", idempotencyKey)
+	if c.GetString("idempotencyKey") != "" {
+		if cached := idemCache.get(idempotencyKey); cached != nil {
+			go func() { recordLog(user, dbToken, nil, modelName, 0, 0, 0, cached.statusCode, c.Param("path"), time.Now()); checkUsageThresholds(user) }()
+			c.Data(cached.statusCode, cached.contentType, cached.body)
+			return
+		}
+	}
+
+	// ── 3. Select upstream channels (failover support) ───────────────────────────
+	channels, err := model.SelectChannels(modelName)
+	if err != nil || len(channels) == 0 {
 		c.JSON(http.StatusServiceUnavailable, openAIError("no available channel for model: "+modelName))
 		return
 	}
 
-	// ── 4. Build upstream request ────────────────────────────────────────────────
-	// Strip /v1 from base URL (if present) then append the full request path,
-	// so both "https://api.openai.com" and "https://api.openai.com/v1" work.
-	var upstreamURL string
-	if channel.Type == "image" && channel.FixedPath != "" {
-		upstreamURL = strings.TrimRight(channel.BaseURL, "/") + channel.FixedPath
-		if c.Request.URL.RawQuery != "" {
-			upstreamURL += "?" + c.Request.URL.RawQuery
-		}
-	} else {
-		baseURL := strings.TrimRight(channel.BaseURL, "/")
-		baseURL = strings.TrimSuffix(baseURL, "/v1")
-		if isAnthropicPath {
-			upstreamURL = baseURL + "/v1/chat/completions"
-		} else {
-			upstreamURL = baseURL + c.Request.URL.Path
-		}
-		if c.Request.URL.RawQuery != "" {
-			upstreamURL += "?" + c.Request.URL.RawQuery
-		}
-	}
-
-	req, err := http.NewRequest(c.Request.Method, upstreamURL, bytes.NewBuffer(bodyBytes))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, openAIError("failed to build upstream request"))
-		return
-	}
-
-	// Copy all original headers, then override Authorization with channel key.
-	// Skip hop-by-hop headers that must not be forwarded.
+	// ── 4. Build and execute upstream request with failover ──────────────────────
+	// Iterate channels: try first, fall back to next on 5xx or connection error.
+	// 4xx errors are NOT retried (client error, not upstream fault).
+	startTime := time.Now()
+	client := &http.Client{Timeout: 120 * time.Second}
+	var resp *http.Response
+	var usedChannel *model.Channel
+	var lastErr error
 	hopByHop := map[string]bool{
 		"connection":          true,
 		"keep-alive":          true,
@@ -133,26 +173,53 @@ func Relay(c *gin.Context) {
 		"transfer-encoding":   true,
 		"upgrade":             true,
 	}
-	for k, vs := range c.Request.Header {
-		if hopByHop[strings.ToLower(k)] {
+
+	for i := range channels {
+		ch := &channels[i]
+		// Build upstream URL for this channel
+		upstreamURL := buildUpstreamURL(ch, c.Request.URL.Path, c.Request.URL.RawQuery, isAnthropicPath)
+		req, err := http.NewRequest(c.Request.Method, upstreamURL, bytes.NewBuffer(bodyBytes))
+		if err != nil {
+			lastErr = err
 			continue
 		}
-		for _, v := range vs {
-			req.Header.Add(k, v)
+		// Copy headers for each attempt (req is per-channel)
+		for k, vs := range c.Request.Header {
+			if hopByHop[strings.ToLower(k)] {
+				continue
+			}
+			for _, v := range vs {
+				req.Header.Add(k, v)
+			}
 		}
-	}
-	req.Header.Set("Authorization", "Bearer "+channel.APIKey)
-	req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+ch.APIKey)
+		req.Header.Set("Content-Type", "application/json")
 
-	// ── 5. Execute upstream request ──────────────────────────────────────────────
-	startTime := time.Now()
-	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, openAIError("upstream request failed: "+err.Error()))
+		resp, err = client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue // connection error → try next channel
+		}
+		// 5xx: upstream error → try next channel. 4xx: client error → keep response.
+		if resp.StatusCode >= 500 && i < len(channels)-1 {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("upstream returned %d", resp.StatusCode)
+			continue
+		}
+		usedChannel = ch
+		break
+	}
+
+	if resp == nil {
+		errMsg := "all channels exhausted"
+		if lastErr != nil {
+			errMsg = lastErr.Error()
+		}
+		c.JSON(http.StatusBadGateway, openAIError("upstream request failed: "+errMsg))
 		return
 	}
 	defer resp.Body.Close()
+	channel := usedChannel
 
 	// ── 6. Copy response headers to client ───────────────────────────────────────
 
@@ -180,7 +247,9 @@ func Relay(c *gin.Context) {
 
 
 	// ──── 7. Handle response (stream vs non-stream) ────────────────
-	if isAnthropicPath && !isStream {
+	if isAnthropicPath && isStream {
+		handleAnthropicStream(c, resp, user, dbToken, channel, modelName, startTime)
+	} else if isAnthropicPath && !isStream {
 		handleAnthropicNonStream(c, resp, user, dbToken, channel, modelName, startTime)
 	} else if isStream {
 		handleStream(c, resp, user, dbToken, channel, modelName, startTime)
@@ -199,6 +268,11 @@ func handleStream(c *gin.Context, resp *http.Response, user *model.User,
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("X-Accel-Buffering", "no")
+
+	// Mark idempotency key as used (stream can't be cached but we prevent re-processing)
+	if c.GetString("idempotencyKey") != "" {
+		idemCache.set(c.GetString("idempotencyKey"), &idempotencyEntry{createdAt: time.Now()})
+	}
 
 	var promptTokens, completionTokens, cacheTokens int
 	writer := c.Writer
@@ -240,8 +314,8 @@ func handleStream(c *gin.Context, resp *http.Response, user *model.User,
 	}
 
 	// Record log asynchronously to avoid blocking the response
-	go recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
-		resp.StatusCode, c.Param("path"), startTime)
+	go func() { recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
+		resp.StatusCode, c.Param("path"), startTime); checkUsageThresholds(user) }()
 }
 
 // handleNonStream reads the full response, records log, and returns to client.
@@ -264,8 +338,16 @@ func handleNonStream(c *gin.Context, resp *http.Response, user *model.User,
 		}
 	}
 
-	go recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
-		resp.StatusCode, c.Param("path"), startTime)
+	if c.GetString("idempotencyKey") != "" {
+		idemCache.set(c.GetString("idempotencyKey"), &idempotencyEntry{
+			statusCode:  resp.StatusCode,
+			contentType: resp.Header.Get("Content-Type"),
+			body:        bodyBytes,
+			createdAt:   time.Now(),
+		})
+	}
+	go func() { recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
+		resp.StatusCode, c.Param("path"), startTime); checkUsageThresholds(user) }()
 
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
 }
@@ -280,7 +362,7 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 	var mp model.ModelPricing
 	if err := model.DB.Where("model_name = ?", modelName).First(&mp).Error; err == nil {
 		if mp.BillingMode == "call" {
-			totalCost := mp.CallPrice
+			totalCost := mp.CallPrice * user.PriceMultiplier
 			status := 1
 			if statusCode >= 400 {
 				status = 2
@@ -316,7 +398,7 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 	inputCost := float64(inputTokens) / 1000000.0 * inputPrice
 	outputCost := float64(outputTokens) / 1000000.0 * outputPrice
 	cacheCost := float64(cacheTokens) / 1000000.0 * inputPrice // cache billed at input price
-	totalCost := inputCost + outputCost + cacheCost
+	totalCost := (inputCost + outputCost + cacheCost) * user.PriceMultiplier
 
 	status := 1
 	if statusCode >= 400 {
@@ -411,15 +493,15 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 					"data":    urls,
 				})
 		}
-			go recordLog(user, token, channel, modelName, 0, 0, 0,
-				http.StatusOK, c.Param("path"), startTime)
+			go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
+				http.StatusOK, c.Param("path"), startTime); checkUsageThresholds(user) }()
 			return
 	}
 
 	// Fallback: upstream returned SSE format we cannot parse
 	c.Data(resp.StatusCode, "text/plain; charset=utf-8", bodyBytes)
-	go recordLog(user, token, channel, modelName, 0, 0, 0,
-		resp.StatusCode, c.Param("path"), startTime)
+	go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
+		resp.StatusCode, c.Param("path"), startTime); checkUsageThresholds(user) }()
 }
 }
 
@@ -478,4 +560,26 @@ func openAIError(msg string) gin.H {
 			"code":    nil,
 		},
 	}
+}
+
+func buildUpstreamURL(ch *model.Channel, path, rawQuery string, isAnthropicPath bool) string {
+	if ch.Type == "image" && ch.FixedPath != "" {
+		u := strings.TrimRight(ch.BaseURL, "/") + ch.FixedPath
+		if rawQuery != "" {
+			u += "?" + rawQuery
+		}
+		return u
+	}
+	baseURL := strings.TrimRight(ch.BaseURL, "/")
+	baseURL = strings.TrimSuffix(baseURL, "/v1")
+	var u string
+	if isAnthropicPath {
+		u = baseURL + "/v1/chat/completions"
+	} else {
+		u = baseURL + path
+	}
+	if rawQuery != "" {
+		u += "?" + rawQuery
+	}
+	return u
 }

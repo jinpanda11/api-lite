@@ -44,18 +44,29 @@ func GetAvailableChannels() ([]Channel, error) {
 	return channels, nil
 }
 
-// SelectChannel picks the highest-priority available channel.
-// Optionally filter by model name.
-func SelectChannel(model string) (*Channel, error) {
-	var channel Channel
+// SelectChannels returns all matching enabled channels ordered by priority desc.
+// Used for failover: if the first channel fails, the caller can try the next.
+func SelectChannels(model string) ([]Channel, error) {
+	var channels []Channel
 	query := DB.Where("status = 1")
 	if model != "" {
-		// Escape LIKE wildcards in the model name to prevent unintended matches
 		escaped := escapeLike(model)
 		query = query.Where("models = '' OR models LIKE ?", "%"+escaped+"%")
 	}
-	if err := query.Order("priority desc").First(&channel).Error; err != nil {
+	if err := query.Order("priority desc").Find(&channels).Error; err != nil {
 		return nil, err
 	}
-	return &channel, nil
+	return channels, nil
+}
+
+// SelectChannel picks the highest-priority available channel.
+func SelectChannel(model string) (*Channel, error) {
+	chs, err := SelectChannels(model)
+	if err != nil {
+		return nil, err
+	}
+	if len(chs) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return &chs[0], nil
 }

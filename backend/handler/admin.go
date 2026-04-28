@@ -71,7 +71,7 @@ func ListUsers(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize := 20
 	var users []model.User
-	model.DB.Select("id,username,email,role,balance,status,created_at").
+	model.DB.Select("id,username,email,role,balance,status,price_multiplier,created_at").
 		Order("created_at desc").Offset((page-1)*pageSize).Limit(pageSize).Find(&users)
 	var total int64
 	model.DB.Model(&model.User{}).Count(&total)
@@ -83,9 +83,10 @@ func ListUsers(c *gin.Context) {
 func UpdateUserStatus(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var req struct {
-		Status  *int     `json:"status"`
-		Balance *float64 `json:"balance"`
-		Role    string   `json:"role"`
+		Status          *int     `json:"status"`
+		Balance         *float64 `json:"balance"`
+		Role            string   `json:"role"`
+		PriceMultiplier *float64 `json:"price_multiplier"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -112,6 +113,13 @@ func UpdateUserStatus(c *gin.Context) {
 			return
 		}
 		updates["role"] = req.Role
+	}
+	if req.PriceMultiplier != nil {
+		if *req.PriceMultiplier <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "price_multiplier must be positive"})
+			return
+		}
+		updates["price_multiplier"] = *req.PriceMultiplier
 	}
 	// If disabling the user, invalidate all their JWTs
 	if req.Status != nil && *req.Status == 0 {

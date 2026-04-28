@@ -8,22 +8,12 @@ import {
   Form,
   Toast,
   Space,
-  Input,
 } from '@douyinfe/semi-ui'
 import { IconEdit } from '@douyinfe/semi-icons'
-import request from '../api/request'
+import { listUsers, updateUserStatus } from '../api'
+import type { AdminUser } from '../types'
 
 const { Title, Text } = Typography
-
-interface AdminUser {
-  id: number
-  username: string
-  email: string
-  role: string
-  balance: number
-  status: number
-  created_at: string
-}
 
 export default function AdminUsers() {
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -35,7 +25,7 @@ export default function AdminUsers() {
 
   const load = useCallback(() => {
     setLoading(true)
-    request.get('/admin/user', { params: { page } })
+    listUsers({ page })
       .then((res) => { setUsers(res.data.data ?? []); setTotal(res.data.total ?? 0) })
       .finally(() => setLoading(false))
   }, [page])
@@ -46,14 +36,16 @@ export default function AdminUsers() {
     role: string
     balance: string
     status: string
+    price_multiplier: string
   }) => {
     if (!editing) return
     setSubmitting(true)
     try {
-      await request.put(`/admin/user/${editing.id}`, {
+      await updateUserStatus(editing.id, {
         role: values.role,
         balance: parseFloat(values.balance),
         status: parseInt(values.status),
+        price_multiplier: parseFloat(values.price_multiplier),
       })
       Toast.success('已更新')
       setEditing(null)
@@ -82,6 +74,13 @@ export default function AdminUsers() {
       title: '余额',
       dataIndex: 'balance',
       render: (v: number) => `$${v.toFixed(4)}`,
+    },
+    {
+      title: '倍率',
+      dataIndex: 'price_multiplier',
+      render: (v: number) => (
+        <Tag color={v > 1 ? 'orange' : 'blue'}>{v?.toFixed(2) ?? '1.00'}x</Tag>
+      ),
     },
     {
       title: '状态',
@@ -126,6 +125,7 @@ export default function AdminUsers() {
               role: editing.role,
               balance: String(editing.balance),
               status: String(editing.status),
+              price_multiplier: String(editing.price_multiplier ?? 1.0),
             }}
           >
             <Form.Select field="role" label="角色" style={{ width: '100%' }}>
@@ -133,6 +133,7 @@ export default function AdminUsers() {
               <Form.Select.Option value="admin">管理员</Form.Select.Option>
             </Form.Select>
             <Form.InputNumber field="balance" label="余额 (USD)" min={0} />
+            <Form.InputNumber field="price_multiplier" label="价格倍率" min={0.01} step={0.01} />
             <Form.Select field="status" label="状态" style={{ width: '100%' }}>
               <Form.Select.Option value="1">正常</Form.Select.Option>
               <Form.Select.Option value="0">禁用</Form.Select.Option>

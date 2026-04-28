@@ -8,10 +8,12 @@ import (
 	"new-api-lite/handler"
 	"new-api-lite/middleware"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 )
 
 func Setup(r *gin.Engine, webFS fs.FS) {
+	r.Use(gzip.Gzip(gzip.DefaultCompression))
 	r.Use(middleware.SecurityHeaders())
 	r.Use(middleware.CORS())
 
@@ -67,6 +69,10 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		auth.GET("/balance", handler.GetBalance)
 		auth.POST("/redeem", handler.Redeem)
 		auth.GET("/topup/logs", handler.GetTopupLogs)
+
+		// Check-in
+		auth.POST("/checkin", handler.CheckIn)
+		auth.GET("/checkin/status", handler.GetCheckInStatus)
 	}
 
 	// ── Admin-only routes ─────────────────────────────────────────────────────

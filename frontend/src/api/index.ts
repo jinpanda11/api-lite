@@ -92,6 +92,19 @@ export const redeemCode = (code: string) => request.post('/redeem', { code })
 
 export const getTopupLogs = () => request.get('/topup/logs')
 
+// ── Check-in ──────────────────────────────────────────────────────────────
+
+export const checkIn = () => request.post('/checkin')
+
+export const getCheckInStatus = () => request.get('/checkin/status')
+
+// ── Admin: Users ──────────────────────────────────────────────────────────
+
+export const listUsers = (params?: object) => request.get('/admin/user', { params })
+
+export const updateUserStatus = (id: number, data: object) =>
+  request.put(`/admin/user/${id}`, data)
+
 // ── Branding (public) ────────────────────────────────────────────────────────
 
 export const getBranding = () => request.get('/settings/branding')

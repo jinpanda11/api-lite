@@ -24,8 +24,9 @@ type User struct {
 	Email        string         `gorm:"uniqueIndex;size:128" json:"email"`
 	PasswordHash string         `gorm:"size:128;not null" json:"-"`
 	Role         string         `gorm:"size:16;default:user" json:"role"`
-	Balance      float64        `gorm:"default:0" json:"balance"`
-	Status       int            `gorm:"default:1" json:"status"`
+	Balance         float64        `gorm:"default:0" json:"balance"`
+	Status          int            `gorm:"default:1" json:"status"`
+	PriceMultiplier float64        `gorm:"default:1.0" json:"price_multiplier"`
 	TokenVersion int            `gorm:"default:0" json:"-"` // incremented to invalidate JWTs
 }
 

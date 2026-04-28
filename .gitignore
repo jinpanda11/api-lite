@@ -37,3 +37,6 @@ Thumbs.db
 
 # Root-level artifacts
 newapi.db
+
+# Database backups
+backend/backups/

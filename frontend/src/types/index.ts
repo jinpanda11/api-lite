@@ -108,3 +108,20 @@ export interface TopupLog {
   remark: string
   created_at: string
 }
+
+export interface CheckInStatus {
+  checked_in_today: boolean
+  streak: number
+  today_reward: number
+}
+
+export interface AdminUser {
+  id: number
+  username: string
+  email: string
+  role: string
+  balance: number
+  status: number
+  price_multiplier: number
+  created_at: string
+}

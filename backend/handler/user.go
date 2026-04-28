@@ -15,10 +15,82 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// emailLimiter is a simple in-memory rate limiter (email -> last send time).
+// rateLimiter provides multi-window rate limiting with automatic cleanup.
+type rateLimiter struct {
+	mu      sync.Mutex
+	entries map[string]*limiterEntry
+}
+
+type limiterEntry struct {
+	counts      map[time.Duration]int
+	windowStart time.Time
+}
+
+type rateWindow struct {
+	window time.Duration
+	max    int
+}
+
+func newRateLimiter() *rateLimiter {
+	rl := &rateLimiter{entries: make(map[string]*limiterEntry)}
+	go rl.cleanup()
+	return rl
+}
+
+func (rl *rateLimiter) check(key string, windows []rateWindow) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	e, ok := rl.entries[key]
+	if !ok {
+		e = &limiterEntry{counts: make(map[time.Duration]int), windowStart: now}
+		rl.entries[key] = e
+	}
+
+	// Check all windows
+	for _, w := range windows {
+		if now.Sub(e.windowStart) > w.window {
+			continue
+		}
+		if e.counts[w.window] >= w.max {
+			return false
+		}
+	}
+
+	// Increment all windows
+	for _, w := range windows {
+		e.counts[w.window]++
+	}
+	return true
+}
+
+func (rl *rateLimiter) cleanup() {
+	for {
+		time.Sleep(10 * time.Minute)
+		rl.mu.Lock()
+		now := time.Now()
+		for k, e := range rl.entries {
+			if now.Sub(e.windowStart) > 25*time.Hour {
+				delete(rl.entries, k)
+			}
+		}
+		rl.mu.Unlock()
+	}
+}
+
 var (
-	emailLimiter   = map[string]time.Time{}
-	emailLimiterMu sync.Mutex
+	ipLimiter    = newRateLimiter()
+	ipWindows    = []rateWindow{
+		{1 * time.Minute, 5},
+		{1 * time.Hour, 20},
+	}
+	emailRL      = newRateLimiter()
+	emailWindows = []rateWindow{
+		{1 * time.Minute, 1},
+		{1 * time.Hour, 5},
+		{24 * time.Hour, 10},
+	}
 )
 
 // SendVerificationCode godoc
@@ -37,15 +109,16 @@ func SendVerificationCode(c *gin.Context) {
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
 
-	// Rate limit: 60 seconds per email
-	emailLimiterMu.Lock()
-	if last, ok := emailLimiter[email]; ok && time.Since(last) < 60*time.Second {
-		emailLimiterMu.Unlock()
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "please wait 60 seconds before requesting another code"})
+	// Rate limit: IP-based (5/min, 20/hour) and email-based (1/min, 5/hour, 10/day)
+	clientIP := c.ClientIP()
+	if !ipLimiter.check(clientIP, ipWindows) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests from this IP, please try later"})
 		return
 	}
-	emailLimiter[email] = time.Now()
-	emailLimiterMu.Unlock()
+	if !emailRL.check(email, emailWindows) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many codes sent to this email, please try later"})
+		return
+	}
 
 	code := service.GenerateCode()
 	if err := model.SaveVerificationCode(email, code, 10*time.Minute); err != nil {

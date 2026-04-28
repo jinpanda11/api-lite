@@ -11,8 +11,8 @@ import {
   Filler,
 } from 'chart.js'
 import { Line } from 'react-chartjs-2'
-import { getDashboard, getNotices } from '../api'
-import type { DashboardData, DailyCount } from '../types'
+import { getDashboard, getNotices, checkIn, getCheckInStatus } from '../api'
+import type { DashboardData, DailyCount, CheckInStatus } from '../types'
 import type { NoticeItem } from '../components/NoticeModal'
 import { useAppStore } from '../store'
 
@@ -44,6 +44,23 @@ export default function Dashboard() {
   const [notices, setNotices] = useState<NoticeItem[]>([])
   const [noticeDetail, setNoticeDetail] = useState<NoticeItem | null>(null)
   const isAdmin = user?.role === 'admin'
+  const [checkInData, setCheckInData] = useState({ checked_in_today: true, streak: 0, today_reward: 0.01 })
+  const [checkInLoading, setCheckInLoading] = useState(false)
+
+  useEffect(() => {
+    getCheckInStatus()
+      .then((res) => setCheckInData(res.data))
+      .catch(() => {})
+  }, [])
+
+  const handleCheckIn = () => {
+    setCheckInLoading(true)
+    checkIn()
+      .then((res) => {
+        setCheckInData({ checked_in_today: true, streak: res.data.streak, today_reward: res.data.reward })
+      })
+      .finally(() => setCheckInLoading(false))
+  }
 
   useEffect(() => {
     getDashboard()
@@ -171,6 +188,28 @@ export default function Dashboard() {
       </Row>
 
       {/* Admin system stats */}
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} sm={12} lg={6}>
+          <Card style={{ height: '100%' }}>
+            <Text type="tertiary" size="small">每日签到</Text>
+            <div style={{ marginTop: 8 }}>
+              {checkInData.checked_in_today ? (
+                <Tag color="green">已签到 · 连续 {checkInData.streak} 天</Tag>
+              ) : (
+                <Button
+                  type="primary"
+                  size="small"
+                  loading={checkInLoading}
+                  onClick={handleCheckIn}
+                >
+                  签到 +${checkInData.today_reward.toFixed(2)}
+                </Button>
+              )}
+            </div>
+          </Card>
+        </Col>
+      </Row>
+
       {isAdmin && (
         <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
           <Col xs={24} sm={12} lg={6}>
