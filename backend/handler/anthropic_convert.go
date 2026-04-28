@@ -368,6 +368,12 @@ func handleAnthropicStream(c *gin.Context, resp *http.Response, user *model.User
 		}
 	}
 
+	// If the scanner hit an error mid-stream the client may already have
+	// partial content; close the SSE stream cleanly so it doesn't hang.
+	if err := scanner.Err(); err != nil {
+		writeSSE(writer, "error", gin.H{"type": "error", "error": gin.H{"type": "api_error", "message": "upstream stream interrupted"}})
+	}
+
 	if !messageStarted {
 		writeSSE(writer, "message_start", anthropicSSEMsgStart{
 			Type: "message_start",

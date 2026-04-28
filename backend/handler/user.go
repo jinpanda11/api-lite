@@ -149,6 +149,21 @@ var (
 	loginAttemptsMu sync.Mutex
 )
 
+func init() {
+	go func() {
+		for {
+			time.Sleep(10 * time.Minute)
+			loginAttemptsMu.Lock()
+			for k, v := range loginAttempts {
+				if v <= 0 {
+					delete(loginAttempts, k)
+				}
+			}
+			loginAttemptsMu.Unlock()
+		}
+	}()
+}
+
 func loginRateLimit(ip string) bool {
 	loginAttemptsMu.Lock()
 	defer loginAttemptsMu.Unlock()

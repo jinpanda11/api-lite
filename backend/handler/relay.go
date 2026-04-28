@@ -356,6 +356,13 @@ func handleNonStream(c *gin.Context, resp *http.Response, user *model.User,
 func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 	modelName string, inputTokens, outputTokens, cacheTokens, statusCode int, path string, _ time.Time) {
 
+	channelID := uint(0)
+	channelName := ""
+	if channel != nil {
+		channelID = channel.ID
+		channelName = channel.Name
+	}
+
 	var inputPrice, outputPrice float64
 
 	// Look up global model pricing
@@ -378,8 +385,8 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 				UserID:       user.ID,
 				TokenID:      token.ID,
 				TokenName:    token.Name,
-				ChannelID:    channel.ID,
-				ChannelName:  channel.Name,
+				ChannelID:    channelID,
+				ChannelName:  channelName,
 				Model:        modelName,
 				InputTokens:  inputTokens,
 				OutputTokens: outputTokens,
@@ -417,8 +424,8 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 		UserID:       user.ID,
 		TokenID:      token.ID,
 		TokenName:    token.Name,
-		ChannelID:    channel.ID,
-		ChannelName:  channel.Name,
+		ChannelID:    channelID,
+		ChannelName:  channelName,
 		Model:        modelName,
 		InputTokens:  inputTokens + cacheTokens,
 		OutputTokens: outputTokens,

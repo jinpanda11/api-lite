@@ -13,21 +13,22 @@ import (
 func CheckIn(c *gin.Context) {
 	user := middleware.GetCurrentUser(c)
 	today := time.Now().Format("2006-01-02")
-
 	reward := getCheckInReward()
+
+	// Add balance before creating the check-in record so that
+	// a DB failure mid-way doesn't lock the user out of today's reward.
+	if err := user.AddBalance(reward); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add balance"})
+		return
+	}
+
 	record := model.CheckInRecord{
 		UserID: user.ID,
 		Date:   today,
 		Reward: reward,
 	}
-
 	if err := model.DB.Create(&record).Error; err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "already checked in today"})
-		return
-	}
-
-	if err := user.AddBalance(reward); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add balance"})
 		return
 	}
 
