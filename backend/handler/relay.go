@@ -461,67 +461,90 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 		return
 	}
 
-	// Collect all SSE data events to find the final result
+	// Collect all SSE data events, skipping [DONE] markers
 	var lastData string
 	for _, line := range strings.Split(string(bodyBytes), "\n") {
-		if trimmed := strings.TrimSpace(line); strings.HasPrefix(trimmed, "data: ") {
-			lastData = strings.TrimPrefix(trimmed, "data: ")
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "data: ") {
+			continue
 		}
+		data := strings.TrimPrefix(trimmed, "data: ")
+		if data == "[DONE]" || data == "" {
+			continue
+		}
+		lastData = data
 	}
 
-	// Try to extract image URL from the final event (grsai format: results[].url)
 	if lastData != "" {
-		var event struct {
+		path := c.Param("path")
+		isChatEndpoint := strings.Contains(path, "/chat/completions")
+
+		// Try 1: grsai format {"results":[{"url":"..."}]}
+		var grsai struct {
 			Results []struct {
 				URL string `json:"url"`
-		} `json:"results"`
+			} `json:"results"`
 		}
-		if json.Unmarshal([]byte(lastData), &event) == nil && len(event.Results) > 0 {
-			urls := make([]gin.H, len(event.Results))
-			for i, r := range event.Results {
-				urls[i] = gin.H{"url": r.URL, "b64_json": nil}
-		}
-			// Determine response format based on original request path
-			path := c.Param("path")
-			isChatEndpoint := strings.Contains(path, "/chat/completions")
-
+		if json.Unmarshal([]byte(lastData), &grsai) == nil && len(grsai.Results) > 0 {
+			urls := make([]gin.H, len(grsai.Results))
+			for i, r := range grsai.Results {
+				urls[i] = gin.H{"url": r.URL}
+			}
 			if isChatEndpoint {
-				// Return chat completions format for CherryStudio etc.
 				c.JSON(http.StatusOK, gin.H{
-					"choices": []gin.H{
-						{
-							"message": gin.H{
-								"content": fmt.Sprintf("![image](%s)", event.Results[0].URL),
-								"role":     "assistant",
-							},
-							"finish_reason": "stop",
-						},
-					},
-					"usage": gin.H{
-						"prompt_tokens":     0,
-						"completion_tokens": 0,
-						"total_tokens":      0,
-					},
+					"choices": []gin.H{{
+						"message":       gin.H{"content": fmt.Sprintf("![image](%s)", grsai.Results[0].URL), "role": "assistant"},
+						"finish_reason": "stop",
+					}},
+					"usage":   gin.H{"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
 					"created": time.Now().Unix(),
 					"model":   modelName,
 				})
-		} else {
-				// Return OpenAI image generation format for /v1/images/generations
-				c.JSON(http.StatusOK, gin.H{
-					"created": time.Now().Unix(),
-					"data":    urls,
-				})
-		}
+			} else {
+				c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": urls})
+			}
 			go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
 				http.StatusOK, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
 			return
+		}
+
+		// Try 2: standard OpenAI image format {"data":[{"url":"..."}]}
+		var oai struct {
+			Data []struct {
+				URL     string `json:"url"`
+				B64JSON string `json:"b64_json"`
+			} `json:"data"`
+		}
+		if json.Unmarshal([]byte(lastData), &oai) == nil && len(oai.Data) > 0 {
+			urls := make([]gin.H, len(oai.Data))
+			for i, d := range oai.Data {
+				item := gin.H{"url": d.URL}
+				if d.B64JSON != "" {
+					item["b64_json"] = d.B64JSON
+				}
+				urls[i] = item
+			}
+			c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": urls})
+			go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
+				http.StatusOK, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
+			return
+		}
+
+		// Try 3: lastData is already valid JSON → pass through
+		var generic map[string]interface{}
+		if json.Unmarshal([]byte(lastData), &generic) == nil {
+			c.Data(resp.StatusCode, "application/json", []byte(lastData))
+			go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
+				resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
+			return
+		}
 	}
 
-	// Fallback: upstream returned SSE format we cannot parse
-	c.Data(resp.StatusCode, "text/plain; charset=utf-8", bodyBytes)
+	// Fallback: upstream returned SSE we cannot parse — pass raw body as JSON
+	// to give the client its best chance at parsing
+	c.Data(resp.StatusCode, "application/json", bodyBytes)
 	go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
 		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
-}
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
