@@ -102,6 +102,7 @@ func UpdateToken(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	model.CacheInvalidateToken(token.Key)
 	c.JSON(http.StatusOK, gin.H{"data": token})
 }
 
@@ -111,9 +112,15 @@ func DeleteToken(c *gin.Context) {
 	user := middleware.GetCurrentUser(c)
 	id, _ := strconv.Atoi(c.Param("id"))
 
-	if err := model.DB.Where("id = ? AND user_id = ?", id, user.ID).Delete(&model.Token{}).Error; err != nil {
+	var token model.Token
+	if err := model.DB.Where("id = ? AND user_id = ?", id, user.ID).First(&token).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "token not found"})
+		return
+	}
+	if err := model.DB.Delete(&token).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	model.CacheInvalidateToken(token.Key)
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }

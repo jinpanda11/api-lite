@@ -218,7 +218,7 @@ func handleAnthropicNonStream(c *gin.Context, resp *http.Response, user *model.U
 	}
 
 	go recordLog(user, token, channel, modelName, promptTokens, completionTokens, 0,
-		resp.StatusCode, c.Param("path"), startTime)
+		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime)
 
 	c.Data(resp.StatusCode, "application/json", anthropicBody)
 }
@@ -401,5 +401,5 @@ func handleAnthropicStream(c *gin.Context, resp *http.Response, user *model.User
 	}
 
 	go recordLog(user, token, channel, modelName, promptTokens, completionTokens, 0,
-		resp.StatusCode, c.Param("path"), startTime)
+		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime)
 }

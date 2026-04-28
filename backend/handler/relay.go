@@ -86,7 +86,7 @@ func Relay(c *gin.Context) {
 		return
 	}
 
-	dbToken, err := model.GetTokenByKey(apiKey)
+	dbToken, err := model.CacheGetTokenByKey(apiKey)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, openAIError("invalid or expired API key"))
 		return
@@ -104,11 +104,6 @@ func Relay(c *gin.Context) {
 		return
 	}
 
-
-	if user.Balance <= 0 {
-		c.JSON(http.StatusPaymentRequired, openAIError("insufficient balance, please top up"))
-		return
-	}
 
 	// ── 2. Read and parse request body ──────────────────────────────────────────
 	const maxBody = 10 << 20 // 10 MB
@@ -137,12 +132,21 @@ func Relay(c *gin.Context) {
 		}
 	}
 
+	// ── Pre-consume: estimate cost, pre-deduct for call billing ────────
+	estimatedCost, preDeducted := preConsume(user, modelName, bodyBytes)
+	c.Set("preDeducted", preDeducted)
+	if preDeducted < 0 {
+		c.JSON(http.StatusPaymentRequired, openAIError(fmt.Sprintf(
+			"insufficient balance (estimated: $%.4f, balance: $%.4f)", estimatedCost, user.Balance)))
+		return
+	}
+
 	// ── Idempotency check ───────────────────────────────────────────────────
 	idempotencyKey := c.GetHeader("X-Idempotency-Key")
 	c.Set("idempotencyKey", idempotencyKey)
 	if c.GetString("idempotencyKey") != "" {
 		if cached := idemCache.get(idempotencyKey); cached != nil {
-			go func() { recordLog(user, dbToken, nil, modelName, 0, 0, 0, cached.statusCode, c.Param("path"), time.Now()); checkUsageThresholds(user) }()
+			go func() { recordLog(user, dbToken, nil, modelName, 0, 0, 0, cached.statusCode, c.Param("path"), getPreDeducted(c), time.Now()); checkUsageThresholds(user) }()
 			c.Data(cached.statusCode, cached.contentType, cached.body)
 			return
 		}
@@ -315,7 +319,7 @@ func handleStream(c *gin.Context, resp *http.Response, user *model.User,
 
 	// Record log asynchronously to avoid blocking the response
 	go func() { recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
-		resp.StatusCode, c.Param("path"), startTime); checkUsageThresholds(user) }()
+		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
 }
 
 // handleNonStream reads the full response, records log, and returns to client.
@@ -347,14 +351,15 @@ func handleNonStream(c *gin.Context, resp *http.Response, user *model.User,
 		})
 	}
 	go func() { recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
-		resp.StatusCode, c.Param("path"), startTime); checkUsageThresholds(user) }()
+		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
 
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
 }
 
 // recordLog deducts balance and writes an audit log entry.
+// preDeducted is the amount already deducted during pre-consume (call billing only).
 func recordLog(user *model.User, token *model.Token, channel *model.Channel,
-	modelName string, inputTokens, outputTokens, cacheTokens, statusCode int, path string, _ time.Time) {
+	modelName string, inputTokens, outputTokens, cacheTokens, statusCode int, path string, preDeducted float64, _ time.Time) {
 
 	channelID := uint(0)
 	channelName := ""
@@ -375,7 +380,11 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 				status = 2
 				totalCost = 0
 			}
-			if totalCost > 0 {
+			// If already pre-deducted, skip deduction. On 4xx/5xx, refund the pre-deduct.
+			if preDeducted > 0 && statusCode >= 400 {
+				user.AddBalance(preDeducted)
+				totalCost = 0
+			} else if preDeducted <= 0 && totalCost > 0 {
 				if !user.DeductBalance(totalCost) {
 					totalCost = 0
 					status = 2
@@ -413,7 +422,10 @@ func recordLog(user *model.User, token *model.Token, channel *model.Channel,
 		totalCost = 0
 	}
 
-	if totalCost > 0 {
+	// Token billing: deduct after response. Refund pre-deduct on error.
+	if preDeducted > 0 && statusCode >= 400 {
+		user.AddBalance(preDeducted)
+	} else if totalCost > 0 && preDeducted <= 0 {
 		if !user.DeductBalance(totalCost) {
 			totalCost = 0
 			status = 2
@@ -501,14 +513,14 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 				})
 		}
 			go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
-				http.StatusOK, c.Param("path"), startTime); checkUsageThresholds(user) }()
+				http.StatusOK, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
 			return
 	}
 
 	// Fallback: upstream returned SSE format we cannot parse
 	c.Data(resp.StatusCode, "text/plain; charset=utf-8", bodyBytes)
 	go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
-		resp.StatusCode, c.Param("path"), startTime); checkUsageThresholds(user) }()
+		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
 }
 }
 
@@ -557,6 +569,57 @@ func isStreamRequest(body []byte) bool {
 		return req.Stream
 	}
 	return false
+}
+
+// getPreDeducted safely extracts the pre-deducted amount from gin context.
+func getPreDeducted(c *gin.Context) float64 {
+	v, ok := c.Get("preDeducted")
+	if !ok {
+		return 0
+	}
+	f, ok := v.(float64)
+	if !ok {
+		return 0
+	}
+	return f
+}
+
+// preConsume estimates the cost of a request and pre-deducts for call billing.
+// Returns (estimatedCost, preDeducted).
+// preDeducted == -1 means insufficient balance → reject the request.
+func preConsume(user *model.User, modelName string, body []byte) (float64, float64) {
+	var mp model.ModelPricing
+	if err := model.DB.Where("model_name = ?", modelName).First(&mp).Error; err != nil {
+		// Unknown model — allow through, billing will happen post-hoc if pricing exists
+		return 0, 0
+	}
+
+	// Call billing: exact price known, pre-deduct atomically
+	if mp.BillingMode == "call" {
+		cost := mp.CallPrice * user.PriceMultiplier
+		if cost <= 0 {
+			return 0, 0
+		}
+		if !user.DeductBalance(cost) {
+			return cost, -1
+		}
+		return cost, cost
+	}
+
+	// Token billing: estimate from body, check minimum balance
+	estimatedInput := float64(len(body)) / 4.0
+	estimatedOutput := estimatedInput * 0.3
+	if estimatedOutput < 50 {
+		estimatedOutput = 50
+	}
+	inputCost := estimatedInput / 1000000.0 * mp.InputPrice
+	outputCost := estimatedOutput / 1000000.0 * mp.OutputPrice
+	estimated := (inputCost + outputCost) * user.PriceMultiplier
+
+	if estimated > 0 && user.Balance < estimated {
+		return estimated, -1
+	}
+	return estimated, 0
 }
 
 func openAIError(msg string) gin.H {
