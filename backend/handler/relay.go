@@ -353,6 +353,18 @@ func handleNonStream(c *gin.Context, resp *http.Response, user *model.User,
 	go func() { recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
 		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
 
+	// For image channels, sanitize responses that have data:null (upstream error format)
+	if channel != nil && channel.Type == "image" {
+		var sanitized map[string]any
+		if json.Unmarshal(bodyBytes, &sanitized) == nil {
+			if d, ok := sanitized["data"]; !ok || d == nil {
+				sanitized["data"] = []any{}
+			}
+			if b, err := json.Marshal(sanitized); err == nil {
+				bodyBytes = b
+			}
+		}
+	}
 	c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), bodyBytes)
 }
 
@@ -461,8 +473,10 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 		return
 	}
 
-	// Collect all SSE data events, skipping [DONE] markers
+	// Collect SSE data events. Prefer the last line with actual results (non-null),
+	// falling back to the very last data line if none completed.
 	var lastData string
+	var lastCompleted string
 	for _, line := range strings.Split(string(bodyBytes), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(trimmed, "data: ") {
@@ -473,6 +487,20 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 			continue
 		}
 		lastData = data
+		// Detect completed data: has non-null "results" or "data" array, or status=succeeded/finished
+		var peek struct {
+			Results any    `json:"results"`
+			Data    any    `json:"data"`
+			Status  string `json:"status"`
+		}
+		if json.Unmarshal([]byte(data), &peek) == nil {
+			if peek.Results != nil || peek.Data != nil {
+				lastCompleted = data
+			}
+		}
+	}
+	if lastCompleted != "" {
+		lastData = lastCompleted
 	}
 
 	if lastData != "" {
@@ -530,21 +558,25 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 			return
 		}
 
-		// Try 3: lastData is already valid JSON → pass through
+		// Try 3: lastData is valid JSON with a "data" field — pass through
 		var generic map[string]interface{}
 		if json.Unmarshal([]byte(lastData), &generic) == nil {
-			c.Data(resp.StatusCode, "application/json", []byte(lastData))
+			// Sanitize: if "data" is null/missing, replace with empty array
+			if _, ok := generic["data"]; !ok || generic["data"] == nil {
+				generic["data"] = []any{}
+			}
+			sanitized, _ := json.Marshal(generic)
+			c.Data(resp.StatusCode, "application/json", sanitized)
 			go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
 				resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
 			return
 		}
 	}
 
-	// Fallback: upstream returned SSE we cannot parse — pass raw body as JSON
-	// to give the client its best chance at parsing
-	c.Data(resp.StatusCode, "application/json", bodyBytes)
+	// Fallback: return empty data array instead of raw SSE bytes
+	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": []gin.H{}})
 	go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
-		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
+		http.StatusOK, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
