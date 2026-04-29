@@ -132,7 +132,8 @@ func testModelConnectivity(modelName string, ch model.Channel) *ModelStatus {
 	reqBody := map[string]interface{}{
 		"model":    modelName,
 		"messages": []map[string]string{{"role": "user", "content": "hi"}},
-		"max_tokens": 1,
+		"max_tokens": 5,
+		"stream":   false,
 	}
 	bodyBytes, _ := json.Marshal(reqBody)
 	chatBody := string(bodyBytes)
