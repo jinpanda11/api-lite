@@ -25,6 +25,7 @@ import {
   IconBell,
   IconPriceTag,
   IconHistory,
+  IconComment,
 } from '@douyinfe/semi-icons'
 import { useAppStore } from '../store'
 import { getUserInfo, getBranding } from '../api'
@@ -38,6 +39,7 @@ interface LayoutProps {
 }
 
 const NAV_ITEMS = [
+  { itemKey: '/chat', text: '在线聊天', icon: <IconComment /> },
   { itemKey: '/dashboard', text: '仪表板', icon: <IconHome /> },
   { itemKey: '/status', text: '状态监控', icon: <IconServer /> },
   { itemKey: '/tokens', text: '我的令牌', icon: <IconKey /> },
@@ -94,6 +96,10 @@ export default function AppLayout({ children }: LayoutProps) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleNavSelect = (data: any) => {
     const key = String(data.itemKey)
+    if (key === '/chat') {
+      navigate('/chat-embed')
+      return
+    }
     if (!key.startsWith('divider-')) navigate(key)
   }
 

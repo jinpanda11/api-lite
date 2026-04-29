@@ -15,6 +15,10 @@ backend/web/*
 frontend/node_modules/
 frontend/dist/
 
+# Chat frontend
+chat-frontend/node_modules/
+chat-frontend/dist/
+
 # Runtime config (not tracked, use config.yaml.example as template)
 backend/config.yaml
 backend/config.local.yaml

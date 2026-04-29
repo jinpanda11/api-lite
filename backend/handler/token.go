@@ -22,6 +22,41 @@ func ListTokens(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": tokens})
 }
 
+// GetOrCreateChatToken returns the user's first enabled token, or creates one.
+// GET /api/token/chat-key
+func GetOrCreateChatToken(c *gin.Context) {
+	user := middleware.GetCurrentUser(c)
+
+	tokens, err := model.GetTokensByUserID(user.ID)
+	if err == nil {
+		for _, t := range tokens {
+			if t.Status == model.StatusEnabled {
+				c.JSON(http.StatusOK, gin.H{"status": "Success", "data": gin.H{"key": t.Key}})
+				return
+			}
+		}
+	}
+
+	// No enabled token — auto-create one
+	key, err := model.GenerateTokenKey()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
+		return
+	}
+
+	token := model.Token{
+		UserID: user.ID,
+		Key:    key,
+		Name:   "chat",
+		Status: model.StatusEnabled,
+	}
+	if err := model.DB.Create(&token).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create token"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "Success", "data": gin.H{"key": key}})
+}
+
 // CreateToken godoc
 // POST /api/token
 func CreateToken(c *gin.Context) {

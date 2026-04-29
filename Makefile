@@ -12,8 +12,12 @@ build:
 frontend:
 	cd frontend && npm install && npm run build
 
+# Build chat frontend (Vue SPA)
+chat-frontend:
+	cd chat-frontend && npm install && npm run build
+
 # Build everything
-all: frontend build
+all: frontend chat-frontend build
 
 # Tidy Go modules
 tidy:
@@ -23,6 +27,8 @@ tidy:
 clean:
 	rm -f backend/new-api-lite
 	rm -rf backend/web
+	rm -rf chat-frontend/node_modules
+	rm -rf chat-frontend/dist
 
 # Run with race detector (dev)
 race:

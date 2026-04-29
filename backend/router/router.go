@@ -20,7 +20,7 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 	// Serve embedded frontend (SPA) for non-API routes
 	r.NoRoute(spaHandler(webFS))
 
-	// ── Public routes ─────────────────────────────────────────────────────────
+	// -- Public routes --
 	api := r.Group("/api")
 	{
 		// Email verification code (two compatible paths)
@@ -36,7 +36,7 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		api.GET("/settings/email-verification", handler.GetEmailVerificationStatus)
 	}
 
-	// ── Authenticated routes ──────────────────────────────────────────────────
+	// -- Authenticated routes --
 	auth := api.Group("", middleware.AuthRequired())
 	{
 		// User
@@ -52,6 +52,7 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		auth.POST("/token", handler.CreateToken)
 		auth.PUT("/token/:id", handler.UpdateToken)
 		auth.DELETE("/token/:id", handler.DeleteToken)
+			auth.GET("/token/chat-key", handler.GetOrCreateChatToken)
 
 		// Models
 		auth.GET("/models", handler.ListModels)
@@ -75,7 +76,7 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		auth.GET("/checkin/status", handler.GetCheckInStatus)
 	}
 
-	// ── Admin-only routes ─────────────────────────────────────────────────────
+	// -- Admin-only routes --
 	admin := api.Group("", middleware.AuthRequired(), middleware.AdminRequired())
 	{
 		// Channels
@@ -89,7 +90,7 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		admin.GET("/admin/redeem", handler.ListRedeemCodes)
 		admin.POST("/admin/redeem", handler.CreateRedeemCodes)
 		admin.DELETE("/admin/redeem/used", handler.DeleteUsedRedeemCodes)
-			admin.DELETE("/admin/redeem/:id", handler.DeleteRedeemCode)
+		admin.DELETE("/admin/redeem/:id", handler.DeleteRedeemCode)
 
 		// User management
 		admin.GET("/admin/user", handler.ListUsers)
@@ -125,8 +126,45 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		admin.PUT("/admin/monitor-config", handler.UpdateMonitorConfig)
 	}
 
-	// ── Relay: forward all /v1/* to upstream ─────────────────────────────────
+	// -- Chat API routes (auth required) --
+	chat := api.Group("", middleware.AuthRequired())
+	chat.POST("/chat-process", handler.ChatProcess)
+	chat.POST("/session", handler.ChatSession)
+	chat.POST("/config", handler.ChatConfig)
+
+	// -- Chat SPA --
+	r.GET("/chat", serveChatIndex(webFS))
+	r.GET("/chat/*filepath", serveChatSPA(webFS))
+
+	// -- Relay: forward all /v1/* to upstream --
 	r.Any("/v1/*path", handler.Relay)
+}
+
+// -- Chat SPA static file handlers --
+
+func serveChatIndex(webFS fs.FS) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		data, err := fs.ReadFile(webFS, "chat/index.html")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.Header("Cache-Control", "no-cache")
+		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
+	}
+}
+
+func serveChatSPA(webFS fs.FS) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		filePath := "chat/" + strings.TrimPrefix(c.Param("filepath"), "/")
+		data, err := fs.ReadFile(webFS, filePath)
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		serveFile(c, data, filePath)
+	}
 }
 
 // spaHandler serves the embedded frontend for SPA routing.
@@ -169,7 +207,7 @@ func serveFile(c *gin.Context, data []byte, name string) {
 		c.Header("Content-Type", ct)
 	}
 
-	// Hashed filenames → cache aggressively; index.html → never cache
+	// Hashed filenames -> cache aggressively; index.html -> never cache
 	if name == "index.html" {
 		c.Header("Cache-Control", "no-cache")
 	} else if isHashedAsset(name) {

@@ -18,6 +18,7 @@ import ModelPricing from './pages/ModelPricing'
 import AdminNotice from './pages/AdminNotice'
 import AdminAudit from './pages/AdminAudit'
 import StatusPage from './pages/Status'
+import ChatEmbed from './pages/ChatEmbed'
 import { getBranding } from './api'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -34,6 +35,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 }
 
 const USER_ROUTES = [
+  { path: '/chat-embed', element: <ChatEmbed /> },
   { path: '/dashboard', element: <Dashboard /> },
   { path: '/status', element: <StatusPage /> },
   { path: '/tokens', element: <Tokens /> },
