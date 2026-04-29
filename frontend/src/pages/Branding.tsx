@@ -13,7 +13,7 @@ export default function Branding() {
     setLoading(true)
     getSettings()
       .then((res) => {
-        const s = res.data || {}
+        const s = res.data?.data || {}
         form.setValues({
           site_name: s.site_name || '',
           site_logo: s.site_logo || '',
@@ -27,14 +27,12 @@ export default function Branding() {
       .finally(() => setLoading(false))
   }, [form])
 
-  const handleSave = () => {
-    form.validate().then((values) => {
-      setSaving(true)
-      updateSettings(values as Record<string, string>)
-        .then(() => Toast.success('已保存，刷新页面生效'))
-        .catch(() => Toast.error('保存失败'))
-        .finally(() => setSaving(false))
-    }).catch(() => Toast.error('请检查字段格式'))
+  const handleSave = (values: Record<string, string>) => {
+    setSaving(true)
+    updateSettings(values)
+      .then(() => Toast.success('已保存，刷新页面生效'))
+      .catch(() => Toast.error('保存失败'))
+      .finally(() => setSaving(false))
   }
 
   return (
@@ -45,7 +43,7 @@ export default function Branding() {
       </Text>
 
       <Card loading={loading}>
-        <Form form={form} labelPosition="left" labelWidth={120}>
+        <Form form={form} labelPosition="left" labelWidth={120} onSubmit={handleSave}>
           <Form.Input
             field="site_name"
             label="站点名称"
@@ -86,8 +84,8 @@ export default function Branding() {
           <Button
             theme="solid"
             type="primary"
+            htmlType="submit"
             loading={saving}
-            onClick={handleSave}
             style={{ marginTop: 16 }}
           >
             保存
