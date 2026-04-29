@@ -84,6 +84,9 @@ func gatherModelNames() []string {
 
 	names := make([]string, 0, len(seen))
 	for k := range seen {
+		if strings.HasPrefix(k, "test") {
+			continue
+		}
 		names = append(names, k)
 	}
 	return names
