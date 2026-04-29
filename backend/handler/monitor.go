@@ -192,16 +192,23 @@ func testModelConnectivity(modelName string, ch model.Channel) *ModelStatus {
 				Content string `json:"content"`
 			} `json:"delta"`
 		} `json:"choices"`
+		Usage *struct {
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage"`
 		Error *struct {
 			Message string `json:"message"`
 		} `json:"error"`
 	}
 
-	// Online = 2xx AND response body has actual content (choices with text)
+	// Online = 2xx AND response is a valid chat completion (has choices with content
+	// or completion_tokens. Reasoning models may produce empty content but still
+	// consume completion_tokens for reasoning.)
 	result.Online = false
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		if json.Unmarshal(respBytes, &respBody) == nil {
-			if len(respBody.Choices) > 0 && (respBody.Choices[0].Message.Content != "" || respBody.Choices[0].Delta.Content != "") {
+			hasContent := len(respBody.Choices) > 0 && (respBody.Choices[0].Message.Content != "" || respBody.Choices[0].Delta.Content != "")
+			hasTokens := respBody.Usage != nil && respBody.Usage.CompletionTokens > 0
+			if hasContent || hasTokens {
 				result.Online = true
 			} else if respBody.Error != nil && respBody.Error.Message != "" {
 				result.Error = respBody.Error.Message
