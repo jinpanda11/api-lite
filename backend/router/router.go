@@ -52,7 +52,7 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		auth.POST("/token", handler.CreateToken)
 		auth.PUT("/token/:id", handler.UpdateToken)
 		auth.DELETE("/token/:id", handler.DeleteToken)
-			auth.GET("/token/chat-key", handler.GetOrCreateChatToken)
+		auth.GET("/token/chat-key", handler.GetOrCreateChatToken)
 
 		// Models
 		auth.GET("/models", handler.ListModels)

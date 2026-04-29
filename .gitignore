@@ -44,3 +44,6 @@ newapi.db
 
 # Database backups
 backend/backups/
+
+# Deployment scripts (may contain credentials)
+deploy.py

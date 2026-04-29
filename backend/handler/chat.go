@@ -88,6 +88,7 @@ type ChatProcessRequest struct {
 	SystemMessage string       `json:"systemMessage"`
 	Temperature   *float64     `json:"temperature"`
 	TopP          *float64     `json:"top_p"`
+	Model         string       `json:"model"`
 }
 
 type ChatOptions struct {
@@ -105,7 +106,10 @@ func ChatProcess(c *gin.Context) {
 	}
 
 	// Build OpenAI chat completions request
-	modelName := "gpt-3.5-turbo"
+	modelName := req.Model
+	if modelName == "" {
+		modelName = "gpt-3.5-turbo"
+	}
 	messages := []map[string]string{}
 	if req.SystemMessage != "" {
 		messages = append(messages, map[string]string{"role": "system", "content": req.SystemMessage})
