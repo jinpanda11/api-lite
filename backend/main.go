@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net/http"
 	"new-api-lite/config"
 	"new-api-lite/handler"
 	"new-api-lite/model"
 	"new-api-lite/router"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -59,7 +61,14 @@ func main() {
 
 	addr := fmt.Sprintf(":%d", config.C.Server.Port)
 	log.Printf("[SERVER] Listening on http://0.0.0.0%s", addr)
-	if err := r.Run(addr); err != nil {
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      r,
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 120 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }

@@ -16,6 +16,7 @@ import AdminRedeem from './pages/AdminRedeem'
 import AdminUsers from './pages/AdminUsers'
 import ModelPricing from './pages/ModelPricing'
 import AdminNotice from './pages/AdminNotice'
+import AdminAudit from './pages/AdminAudit'
 import StatusPage from './pages/Status'
 import { getBranding } from './api'
 
@@ -49,6 +50,7 @@ const ADMIN_ROUTES = [
   { path: '/admin/redeem', element: <AdminRedeem /> },
   { path: '/admin/users', element: <AdminUsers /> },
   { path: '/admin/branding', element: <Branding /> },
+  { path: '/admin/audit', element: <AdminAudit /> },
 ]
 
 export default function App() {

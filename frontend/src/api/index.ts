@@ -128,6 +128,10 @@ export const getMonitorConfig = () => request.get('/admin/monitor-config')
 export const updateMonitorConfig = (interval: number) =>
   request.put('/admin/monitor-config', { interval })
 
+// ── Audit Log (admin) ──────────────────────────────────────────────────────
+
+export const getAuditLogs = (params?: object) => request.get('/admin/audit', { params })
+
 // ── Model Pricing (admin) ──────────────────────────────────────────────────
 
 export const listModelPricing = () => request.get('/admin/model-pricing')

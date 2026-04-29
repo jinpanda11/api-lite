@@ -16,6 +16,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// ── Relay rate limiter (per API key) ─────────────────────────────────────────
+
+var (
+	relayLimiter = newRateLimiter()
+	relayWindows = []rateWindow{
+		{1 * time.Minute, 60},    // 60 req/min per key
+		{1 * time.Hour, 1000},    // 1000 req/hour per key
+	}
+)
+
 // ── Idempotency cache ──────────────────────────────────────────────────────
 
 type idempotencyEntry struct {
@@ -99,6 +109,12 @@ func Relay(c *gin.Context) {
 		return
 	}
 
+	// Rate limit: per API key, with generous limits for normal usage
+	if !relayLimiter.check(apiKey, relayWindows) {
+		c.JSON(http.StatusTooManyRequests, openAIError("rate limit exceeded, please slow down"))
+		return
+	}
+
 	// ── Handle /v1/models locally (avoid upstream relay) ─────────────────────
 	if c.Param("path") == "/models" {
 		OpenAIModelsList(c)
@@ -159,10 +175,14 @@ func Relay(c *gin.Context) {
 
 	// ── Idempotency check ───────────────────────────────────────────────────
 	idempotencyKey := c.GetHeader("X-Idempotency-Key")
+	if len(idempotencyKey) > 128 {
+		c.JSON(http.StatusBadRequest, openAIError("X-Idempotency-Key too long (max 128 chars)"))
+		return
+	}
 	c.Set("idempotencyKey", idempotencyKey)
 	if c.GetString("idempotencyKey") != "" {
 		if cached := idemCache.get(idempotencyKey); cached != nil {
-			go func() { recordLog(user, dbToken, nil, modelName, 0, 0, 0, cached.statusCode, c.Param("path"), getPreDeducted(c), time.Now()); checkUsageThresholds(user) }()
+			enqueueLog(logTask{user: user, token: dbToken, modelName: modelName, statusCode: cached.statusCode, path: c.Param("path"), preDeducted: getPreDeducted(c), startTime: time.Now(), checkThresholds: true})
 			c.Data(cached.statusCode, cached.contentType, cached.body)
 			return
 		}
@@ -231,11 +251,8 @@ func Relay(c *gin.Context) {
 	}
 
 	if resp == nil {
-		errMsg := "all channels exhausted"
-		if lastErr != nil {
-			errMsg = lastErr.Error()
-		}
-		c.JSON(http.StatusBadGateway, openAIError("upstream request failed: "+errMsg))
+		_ = lastErr // logged server-side, not exposed to client
+		c.JSON(http.StatusBadGateway, openAIError("upstream request failed"))
 		return
 	}
 	defer resp.Body.Close()
@@ -333,9 +350,8 @@ func handleStream(c *gin.Context, resp *http.Response, user *model.User,
 		flusher.Flush()
 	}
 
-	// Record log asynchronously to avoid blocking the response
-	go func() { recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
-		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
+	// Submit log to worker pool to avoid unbounded goroutine growth
+	enqueueLog(logTask{user: user, token: token, channel: channel, modelName: modelName, inputTokens: promptTokens, outputTokens: completionTokens, cacheTokens: cacheTokens, statusCode: resp.StatusCode, path: c.Param("path"), preDeducted: getPreDeducted(c), startTime: startTime, checkThresholds: true})
 }
 
 // handleNonStream reads the full response, records log, and returns to client.
@@ -366,8 +382,7 @@ func handleNonStream(c *gin.Context, resp *http.Response, user *model.User,
 			createdAt:   time.Now(),
 		})
 	}
-	go func() { recordLog(user, token, channel, modelName, promptTokens, completionTokens, cacheTokens,
-		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
+	enqueueLog(logTask{user: user, token: token, channel: channel, modelName: modelName, inputTokens: promptTokens, outputTokens: completionTokens, cacheTokens: cacheTokens, statusCode: resp.StatusCode, path: c.Param("path"), preDeducted: getPreDeducted(c), startTime: startTime, checkThresholds: true})
 
 	// For image channels, sanitize responses that have data:null (upstream error format)
 	if channel != nil && channel.Type == "image" {
@@ -547,8 +562,7 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 			} else {
 				c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": urls})
 			}
-			go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
-				http.StatusOK, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
+			enqueueLog(logTask{user: user, token: token, channel: channel, modelName: modelName, statusCode: http.StatusOK, path: c.Param("path"), preDeducted: getPreDeducted(c), startTime: startTime, checkThresholds: true})
 			return
 		}
 
@@ -569,8 +583,7 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 				urls[i] = item
 			}
 			c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": urls})
-			go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
-				http.StatusOK, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
+			enqueueLog(logTask{user: user, token: token, channel: channel, modelName: modelName, statusCode: http.StatusOK, path: c.Param("path"), preDeducted: getPreDeducted(c), startTime: startTime, checkThresholds: true})
 			return
 		}
 
@@ -583,16 +596,14 @@ func handleSSENonStream(c *gin.Context, resp *http.Response, user *model.User,
 			}
 			sanitized, _ := json.Marshal(generic)
 			c.Data(resp.StatusCode, "application/json", sanitized)
-			go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
-				resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
+			enqueueLog(logTask{user: user, token: token, channel: channel, modelName: modelName, statusCode: resp.StatusCode, path: c.Param("path"), preDeducted: getPreDeducted(c), startTime: startTime, checkThresholds: true})
 			return
 		}
 	}
 
 	// Fallback: return empty data array instead of raw SSE bytes
 	c.JSON(http.StatusOK, gin.H{"created": time.Now().Unix(), "data": []gin.H{}})
-	go func() { recordLog(user, token, channel, modelName, 0, 0, 0,
-		http.StatusOK, c.Param("path"), getPreDeducted(c), startTime); checkUsageThresholds(user) }()
+	enqueueLog(logTask{user: user, token: token, channel: channel, modelName: modelName, statusCode: http.StatusOK, path: c.Param("path"), preDeducted: getPreDeducted(c), startTime: startTime, checkThresholds: true})
 }
 
 

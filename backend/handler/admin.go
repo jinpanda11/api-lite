@@ -2,6 +2,7 @@ package handler
 
 import (
 	"crypto/rand"
+	"fmt"
 	"math/big"
 	"net/http"
 	"new-api-lite/model"
@@ -47,6 +48,7 @@ func CreateRedeemCodes(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "create_redeem_codes", fmt.Sprintf("count=%d value=%.2f", req.Count, req.Value))
 	c.JSON(http.StatusOK, gin.H{"data": codes, "message": "created"})
 }
 
@@ -55,6 +57,7 @@ func CreateRedeemCodes(c *gin.Context) {
 func DeleteRedeemCode(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	model.DB.Delete(&model.RedeemCode{}, id)
+	audit(c, "delete_redeem_code", fmt.Sprintf("id=%d", id))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
@@ -62,6 +65,7 @@ func DeleteRedeemCode(c *gin.Context) {
 // DELETE /api/admin/redeem/used
 func DeleteUsedRedeemCodes(c *gin.Context) {
 	result := model.DB.Where("status != 1").Delete(&model.RedeemCode{})
+	audit(c, "delete_used_redeem_codes", fmt.Sprintf("count=%d", result.RowsAffected))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted", "count": result.RowsAffected})
 }
 
@@ -129,6 +133,7 @@ func UpdateUserStatus(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "update_user", fmt.Sprintf("target_id=%d target_user=%s", id, target.Username))
 	c.JSON(http.StatusOK, gin.H{"message": "updated"})
 }
 

@@ -5,11 +5,33 @@ import (
 	"net/http"
 	"new-api-lite/middleware"
 	"new-api-lite/model"
+	"regexp"
 	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// htmlSanitize strips dangerous HTML elements and attributes.
+// Guards against stored XSS when admin-written notice content is rendered in browsers.
+var (
+	reScript   = regexp.MustCompile(`(?is)<script[^>]*>.*?</script>`)
+	reStyle    = regexp.MustCompile(`(?is)<style[^>]*>.*?</style>`)
+	reDanger   = regexp.MustCompile(`(?is)</?(?:iframe|object|embed|link|meta|base)[^>]*>`)
+	reOnAttr   = regexp.MustCompile(`(?i)\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)`)
+	reJSUri    = regexp.MustCompile(`(?i)(href|src)\s*=\s*"(?:javascript|data)\s*:`)
+	reJSUriSq  = regexp.MustCompile(`(?i)(href|src)\s*=\s*'(?:javascript|data)\s*:`)
+)
+
+func sanitizeHTML(s string) string {
+	s = reScript.ReplaceAllString(s, "")
+	s = reStyle.ReplaceAllString(s, "")
+	s = reDanger.ReplaceAllString(s, "")
+	s = reOnAttr.ReplaceAllString(s, "")
+	s = reJSUri.ReplaceAllString(s, `$1="#"`)
+	s = reJSUriSq.ReplaceAllString(s, `$1='#'`)
+	return s
+}
 
 
 // noticeRequest limits which fields can be set during create/update.
@@ -39,8 +61,8 @@ func CreateNotice(c *gin.Context) {
 		return
 	}
 	n := model.Notice{
-		Title:    req.Title,
-		Content:  req.Content,
+		Title:    sanitizeHTML(req.Title),
+		Content:  sanitizeHTML(req.Content),
 		Priority: req.Priority,
 		Status:   1,
 	}
@@ -48,6 +70,7 @@ func CreateNotice(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create notice"})
 		return
 	}
+	audit(c, "create_notice", fmt.Sprintf("title=%s", n.Title))
 	c.JSON(http.StatusOK, gin.H{"data": n})
 }
 
@@ -66,14 +89,15 @@ func UpdateNotice(c *gin.Context) {
 		return
 	}
 	updates := map[string]interface{}{
-		"title":    req.Title,
-		"content":  req.Content,
+		"title":    sanitizeHTML(req.Title),
+		"content":  sanitizeHTML(req.Content),
 		"priority": req.Priority,
 	}
 	if err := model.DB.Model(&notice).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update notice"})
 		return
 	}
+	audit(c, "update_notice", fmt.Sprintf("id=%d title=%s", id, req.Title))
 	c.JSON(http.StatusOK, gin.H{"data": notice})
 }
 
@@ -82,6 +106,7 @@ func UpdateNotice(c *gin.Context) {
 func DeleteNotice(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	model.DB.Delete(&model.Notice{}, id)
+	audit(c, "delete_notice", fmt.Sprintf("id=%d", id))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 

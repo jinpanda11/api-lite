@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Form, Button, Card, Typography, Toast } from '@douyinfe/semi-ui'
-import { register, sendVerificationCode, getEmailVerificationStatus } from '../api'
+import { register, sendVerificationCode, getEmailVerificationStatus, getBranding } from '../api'
 
 const { Title, Text } = Typography
 
@@ -11,11 +11,21 @@ export default function Register() {
   const [sending, setSending] = useState(false)
   const [countdown, setCountdown] = useState(0)
   const [emailVerificationEnabled, setEmailVerificationEnabled] = useState(true)
+  const [branding, setBranding] = useState<Record<string, string>>({})
+  const [logoError, setLogoError] = useState(false)
   const formRef = useRef<any>(null)
 
   useEffect(() => {
     getEmailVerificationStatus()
       .then((res) => setEmailVerificationEnabled(res.data.enabled !== false))
+      .catch(() => {})
+    getBranding()
+      .then((res) => {
+        const d = res.data || {}
+        setBranding(d)
+        setLogoError(false)
+        if (d.site_title) document.title = d.site_title
+      })
       .catch(() => {})
   }, [])
 
@@ -90,11 +100,20 @@ export default function Register() {
     >
       <Card style={{ width: 440 }} bodyStyle={{ padding: 32 }}>
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <span style={{ fontSize: 32 }}>⚡</span>
+          {(() => {
+            const logo = (branding.site_logo || '').trim()
+            const logoSize = Number(branding.site_logo_size) || 48
+            if (!logo) return <span style={{ fontSize: logoSize }}>⚡</span>
+            if (logo.startsWith('http') && !logoError) {
+              return <img src={logo} alt="logo" style={{ width: logoSize, height: logoSize }}
+                onError={() => setLogoError(true)} />
+            }
+            return <span style={{ fontSize: logoSize }}>{logo.startsWith('http') ? '⚡' : logo}</span>
+          })()}
           <Title heading={3} style={{ marginTop: 8, marginBottom: 4 }}>
             创建账号
           </Title>
-          <Text type="tertiary">注册 New API Lite</Text>
+          <Text type="tertiary" style={{ fontSize: Number(branding.site_name_size) || undefined }}>注册{branding.site_name ? ' ' + branding.site_name : ' New API Lite'}</Text>
         </div>
 
         <Form ref={formRef} onSubmit={handleSubmit}>

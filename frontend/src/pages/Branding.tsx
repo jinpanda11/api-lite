@@ -19,6 +19,8 @@ export default function Branding() {
           site_logo: s.site_logo || '',
           site_title: s.site_title || '',
           site_favicon: s.site_favicon || '',
+          site_logo_size: s.site_logo_size || '',
+          site_name_size: s.site_name_size || '',
         })
       })
       .catch(() => Toast.error('加载设置失败'))
@@ -67,6 +69,24 @@ export default function Branding() {
             label="标签页图标"
             placeholder="emoji 图标"
             extraText="浏览器标签页上的小图标，支持 emoji（如 ⚡）"
+          />
+          <Form.InputNumber
+            field="site_logo_size"
+            label="Logo 大小"
+            placeholder="默认 20"
+            suffix="px"
+            min={12}
+            max={200}
+            extraText="Logo 字体/图片大小（像素），留空使用默认值"
+          />
+          <Form.InputNumber
+            field="site_name_size"
+            label="站点名称大小"
+            placeholder="默认 16"
+            suffix="px"
+            min={12}
+            max={48}
+            extraText="站点名称字体大小（像素），留空使用默认值"
           />
 
           <Button

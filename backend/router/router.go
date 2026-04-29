@@ -116,6 +116,9 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		// Backup
 		admin.POST("/admin/backup", handler.BackupNow)
 
+		// Audit log
+		admin.GET("/admin/audit", handler.GetAuditLogs)
+
 		// Channel monitor toggle
 		admin.PUT("/channel/:id/monitor", handler.ToggleChannelMonitor)
 		admin.GET("/admin/monitor-config", handler.GetMonitorConfig)

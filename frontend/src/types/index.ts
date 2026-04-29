@@ -115,6 +115,15 @@ export interface CheckInStatus {
   today_reward: number
 }
 
+export interface AuditLog {
+  id: number
+  admin_name: string
+  admin_id: number
+  action: string
+  detail: string
+  created_at: string
+}
+
 export interface AdminUser {
   id: number
   username: string

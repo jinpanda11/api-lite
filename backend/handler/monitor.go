@@ -225,6 +225,7 @@ func ToggleChannelMonitor(c *gin.Context) {
 	}
 
 	model.DB.Model(&ch).Update("monitor_enabled", req.MonitorEnabled)
+	audit(c, "toggle_monitor", fmt.Sprintf("channel=%s enabled=%v", ch.Name, req.MonitorEnabled))
 
 	if !req.MonitorEnabled {
 		// Remove all model results for this channel
@@ -264,5 +265,6 @@ func UpdateMonitorConfig(c *gin.Context) {
 	}
 
 	applyMonitorInterval(req.Interval)
+	audit(c, "update_monitor_interval", fmt.Sprintf("minutes=%d", req.Interval))
 	c.JSON(http.StatusOK, gin.H{"message": fmt.Sprintf("interval set to %d minutes", req.Interval)})
 }

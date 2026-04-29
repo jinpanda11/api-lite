@@ -12,7 +12,6 @@ const (
 	RoleAdmin = "admin"
 
 	StatusEnabled  = 1
-	StatusDisabled = 0
 )
 
 type User struct {

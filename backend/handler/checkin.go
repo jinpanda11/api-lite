@@ -15,13 +15,9 @@ func CheckIn(c *gin.Context) {
 	today := time.Now().Format("2006-01-02")
 	reward := getCheckInReward()
 
-	// Add balance before creating the check-in record so that
-	// a DB failure mid-way doesn't lock the user out of today's reward.
-	if err := user.AddBalance(reward); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add balance"})
-		return
-	}
-
+	// Create the check-in record FIRST — unique constraint on (user_id, date)
+	// prevents concurrent duplicate check-ins. Balance is added only after the
+	// record is committed, so a DB conflict never leaves orphaned balance.
 	record := model.CheckInRecord{
 		UserID: user.ID,
 		Date:   today,
@@ -29,6 +25,13 @@ func CheckIn(c *gin.Context) {
 	}
 	if err := model.DB.Create(&record).Error; err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": "already checked in today"})
+		return
+	}
+
+	if err := user.AddBalance(reward); err != nil {
+		// Compensate: remove the record so the user can retry
+		model.DB.Delete(&record)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to add balance"})
 		return
 	}
 

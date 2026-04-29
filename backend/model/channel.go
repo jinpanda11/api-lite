@@ -59,14 +59,3 @@ func SelectChannels(model string) ([]Channel, error) {
 	return channels, nil
 }
 
-// SelectChannel picks the highest-priority available channel.
-func SelectChannel(model string) (*Channel, error) {
-	chs, err := SelectChannels(model)
-	if err != nil {
-		return nil, err
-	}
-	if len(chs) == 0 {
-		return nil, gorm.ErrRecordNotFound
-	}
-	return &chs[0], nil
-}

@@ -2,14 +2,19 @@ package service
 
 import (
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"math/big"
 	"new-api-lite/config"
 	"new-api-lite/model"
 	"strconv"
+	"time"
 
 	gomail "gopkg.in/gomail.v2"
 )
+
+// ErrSMTPNotConfigured is returned when SMTP has not been set up.
+var ErrSMTPNotConfigured = errors.New("SMTP not configured")
 
 // GenerateCode creates a 6-digit numeric code.
 func GenerateCode() string {
@@ -51,13 +56,18 @@ func getSMTPConfig() (host, username, password, from string, port int, ssl bool)
 	return
 }
 
+// IsSMTPConfigured returns true if SMTP settings are present and not default.
+func IsSMTPConfigured() bool {
+	host, _, _, _, _, _ := getSMTPConfig()
+	return host != "" && host != "smtp.example.com"
+}
+
 // SendVerificationEmail sends a 6-digit code via SMTP.
+// Returns ErrSMTPNotConfigured if SMTP is not set up.
 func SendVerificationEmail(to, code string) error {
 	host, username, password, from, port, ssl := getSMTPConfig()
 	if host == "" || host == "smtp.example.com" {
-		// SMTP not configured: print to console for development
-		fmt.Printf("[EMAIL] To: %s | Code: %s\n", to, code)
-		return nil
+		return ErrSMTPNotConfigured
 	}
 
 	m := gomail.NewMessage()
@@ -65,15 +75,25 @@ func SendVerificationEmail(to, code string) error {
 	m.SetHeader("To", to)
 	m.SetHeader("Subject", "Your verification code")
 	m.SetBody("text/html", fmt.Sprintf(`
-		<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
-			<h2>Verification Code</h2>
-			<p>Your verification code is:</p>
-			<div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#4F46E5">%s</div>
-			<p style="color:#888;font-size:12px">This code expires in 10 minutes. Do not share it.</p>
-		</div>
-	`, code))
+			<div style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto">
+				<h2>Verification Code</h2>
+				<p>Your verification code is:</p>
+				<div style="font-size:36px;font-weight:bold;letter-spacing:8px;color:#4F46E5">%s</div>
+				<p style="color:#888;font-size:12px">This code expires in 10 minutes. Do not share it.</p>
+			</div>
+		`, code))
 
 	d := gomail.NewDialer(host, port, username, password)
 	d.SSL = ssl
-	return d.DialAndSend(m)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- d.DialAndSend(m)
+	}()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(30 * time.Second):
+		return fmt.Errorf("SMTP send timed out after 30s")
+	}
 }

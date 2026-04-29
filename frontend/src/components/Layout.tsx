@@ -24,6 +24,7 @@ import {
   IconGift,
   IconBell,
   IconPriceTag,
+  IconHistory,
 } from '@douyinfe/semi-icons'
 import { useAppStore } from '../store'
 import { getUserInfo, getBranding } from '../api'
@@ -53,6 +54,7 @@ const ADMIN_NAV_ITEMS = [
   { itemKey: '/admin/redeem', text: '兑换码', icon: <IconGift /> },
   { itemKey: '/admin/users', text: '用户管理', icon: <IconUser /> },
   { itemKey: '/admin/branding', text: '站点品牌', icon: <IconSetting /> },
+  { itemKey: '/admin/audit', text: '审计记录', icon: <IconHistory /> },
 ]
 
 export default function AppLayout({ children }: LayoutProps) {
@@ -60,6 +62,7 @@ export default function AppLayout({ children }: LayoutProps) {
   const location = useLocation()
   const { user, theme, setTheme, setUser, logout, setLoggedIn } = useAppStore()
   const [branding, setBranding] = useState<Record<string, string>>({})
+  const [logoError, setLogoError] = useState(false)
 
   useEffect(() => {
     document.body.setAttribute('theme-mode', theme)
@@ -79,7 +82,7 @@ export default function AppLayout({ children }: LayoutProps) {
 
   useEffect(() => {
     getBranding()
-      .then((res) => setBranding(res.data || {}))
+      .then((res) => { setBranding(res.data || {}); setLogoError(false) })
       .catch(() => {})
   }, [])
 
@@ -117,16 +120,17 @@ export default function AppLayout({ children }: LayoutProps) {
           header={{
             logo: (
               <div style={{ padding: '16px 8px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                {branding.site_logo ? (
-                  branding.site_logo.startsWith('http') ? (
-                    <img src={branding.site_logo} alt="logo" style={{ width: 24, height: 24 }} />
-                  ) : (
-                    <span style={{ fontSize: 20 }}>{branding.site_logo}</span>
-                  )
-                ) : (
-                  <span style={{ fontSize: 20 }}>⚡</span>
-                )}
-                <Text strong style={{ fontSize: 16 }}>
+                {(() => {
+                  const logo = (branding.site_logo || '').trim()
+                  const logoSize = Number(branding.site_logo_size) || 20
+                  if (!logo) return <span style={{ fontSize: logoSize }}>⚡</span>
+                  if (logo.startsWith('http') && !logoError) {
+                    return <img src={logo} alt="logo" style={{ width: logoSize, height: logoSize }}
+                      onError={() => setLogoError(true)} />
+                  }
+                  return <span style={{ fontSize: logoSize }}>{logo.startsWith('http') ? '⚡' : logo}</span>
+                })()}
+                <Text strong style={{ fontSize: Number(branding.site_name_size) || 16 }}>
                   {branding.site_name || 'New API Lite'}
                 </Text>
               </div>

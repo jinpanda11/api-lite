@@ -60,6 +60,7 @@ func CreateChannel(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create channel"})
 		return
 	}
+	audit(c, "create_channel", fmt.Sprintf("name=%s type=%s", ch.Name, ch.Type))
 	ch.APIKey = maskAPIKey(ch.APIKey)
 	c.JSON(http.StatusOK, gin.H{"data": ch})
 }
@@ -94,6 +95,7 @@ func UpdateChannel(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update channel"})
 		return
 	}
+	audit(c, "update_channel", fmt.Sprintf("id=%d name=%s", id, req.Name))
 	channel.APIKey = maskAPIKey(channel.APIKey)
 	c.JSON(http.StatusOK, gin.H{"data": channel})
 }
@@ -106,6 +108,7 @@ func DeleteChannel(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	audit(c, "delete_channel", fmt.Sprintf("id=%d", id))
 	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 

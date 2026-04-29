@@ -50,6 +50,7 @@ func Init() {
 		&ModelPricing{},
 		&Notice{},
 		&CheckInRecord{},
+		&AuditLog{},
 	); err != nil {
 		log.Fatalf("auto migrate failed: %v", err)
 	}

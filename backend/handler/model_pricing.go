@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"new-api-lite/model"
 	"strings"
@@ -45,5 +46,6 @@ func UpdateModelPricing(c *gin.Context) {
 		model.DB.Create(&req)
 	}
 
+	audit(c, "update_model_pricing", fmt.Sprintf("model=%s billing=%s input=%.6f output=%.6f call=%.4f", modelName, req.BillingMode, req.InputPrice, req.OutputPrice, req.CallPrice))
 	c.JSON(http.StatusOK, gin.H{"data": req})
 }

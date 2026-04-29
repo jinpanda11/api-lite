@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"new-api-lite/config"
@@ -121,12 +123,20 @@ func SendVerificationCode(c *gin.Context) {
 	}
 
 	code := service.GenerateCode()
+
+	// Send email BEFORE saving the code. If SMTP fails, no stale code is left in DB.
+	if err := service.SendVerificationEmail(email, code); err != nil {
+		if errors.Is(err, service.ErrSMTPNotConfigured) && gin.Mode() == gin.DebugMode {
+			// Dev convenience: log code to console so it can be used for testing
+			fmt.Printf("[EMAIL] To: %s | Code: %s\n", email, code)
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send verification email"})
+			return
+		}
+	}
+
 	if err := model.SaveVerificationCode(email, code, 10*time.Minute); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to save verification code"})
-		return
-	}
-	if err := service.SendVerificationEmail(email, code); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send email"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "verification code sent"})
@@ -145,46 +155,25 @@ func GetEmailVerificationStatus(c *gin.Context) {
 // login rate limiter helpers
 
 var (
-	loginAttempts   = map[string]int{}
-	loginAttemptsMu sync.Mutex
+	loginLimiter = newRateLimiter()
+	loginWindows = []rateWindow{
+		{1 * time.Minute, 5},     // max 5 failed attempts per minute
+		{15 * time.Minute, 15},   // max 15 failed attempts per 15 minutes
+		{1 * time.Hour, 30},      // max 30 failed attempts per hour
+	}
 )
 
-func init() {
-	go func() {
-		for {
-			time.Sleep(10 * time.Minute)
-			loginAttemptsMu.Lock()
-			for k, v := range loginAttempts {
-				if v <= 0 {
-					delete(loginAttempts, k)
-				}
-			}
-			loginAttemptsMu.Unlock()
-		}
-	}()
-}
-
 func loginRateLimit(ip string) bool {
-	loginAttemptsMu.Lock()
-	defer loginAttemptsMu.Unlock()
-	if count, ok := loginAttempts[ip]; ok && count >= 10 {
-		return false
-	}
-	return true
+	return loginLimiter.check(ip, loginWindows)
 }
 
-func loginAttempt(ip string) {
-	loginAttemptsMu.Lock()
-	loginAttempts[ip]++
-	loginAttemptsMu.Unlock()
-	time.AfterFunc(1*time.Minute, func() {
-		loginAttemptsMu.Lock()
-		if loginAttempts[ip] > 0 {
-			loginAttempts[ip]--
-		}
-		loginAttemptsMu.Unlock()
-	})
-}
+var (
+	registerLimiter = newRateLimiter()
+	registerWindows = []rateWindow{
+		{10 * time.Minute, 5},   // 5 registration attempts per 10 minutes
+		{1 * time.Hour, 15},     // 15 per hour
+	}
+)
 
 // Register godoc
 // POST /api/user/register
@@ -208,6 +197,14 @@ func Register(c *gin.Context) {
 		emailVerificationEnabled = v == "true"
 	}
 	if emailVerificationEnabled {
+		if req.Code == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "verification code is required"})
+			return
+		}
+		if !registerLimiter.check(c.ClientIP(), registerWindows) {
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many registration attempts, please try later"})
+			return
+		}
 		if !model.VerifyCode(email, req.Code) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or expired verification code"})
 			return
@@ -276,12 +273,10 @@ func Login(c *gin.Context) {
 
 	user, err := model.GetUserByUsername(req.Username)
 	if err != nil {
-		loginAttempt(ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
 	if !user.CheckPassword(req.Password) {
-		loginAttempt(ip)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid username or password"})
 		return
 	}
@@ -301,8 +296,17 @@ func Login(c *gin.Context) {
 	if expireHours <= 0 {
 		expireHours = 168
 	}
-	secure := c.Request.TLS != nil
-	c.SetCookie("auth_token", token, expireHours*3600, "/", "", secure, true)
+	// Mark cookie Secure if TLS is present OR behind a trusted reverse proxy
+	secure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	http.SetCookie(c.Writer, &http.Cookie{
+			Name:     "auth_token",
+			Value:    token,
+			Path:     "/",
+			MaxAge:   expireHours * 3600,
+			HttpOnly: true,
+			Secure:   secure,
+			SameSite: http.SameSiteStrictMode,
+		})
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token, // kept for API clients that can't use cookies
@@ -319,7 +323,14 @@ func Login(c *gin.Context) {
 // Logout clears the auth cookie.
 // POST /api/user/logout
 func Logout(c *gin.Context) {
-	c.SetCookie("auth_token", "", -1, "/", "", false, true)
+	http.SetCookie(c.Writer, &http.Cookie{
+			Name:     "auth_token",
+			Value:    "",
+			Path:     "/",
+			MaxAge:   -1,
+			HttpOnly: true,
+			SameSite: http.SameSiteStrictMode,
+		})
 	c.JSON(http.StatusOK, gin.H{"message": "logged out"})
 }
 

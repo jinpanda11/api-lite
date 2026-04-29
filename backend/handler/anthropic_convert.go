@@ -217,8 +217,7 @@ func handleAnthropicNonStream(c *gin.Context, resp *http.Response, user *model.U
 		completionTokens = cr.Usage.CompletionTokens
 	}
 
-	go recordLog(user, token, channel, modelName, promptTokens, completionTokens, 0,
-		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime)
+	enqueueLog(logTask{user: user, token: token, channel: channel, modelName: modelName, inputTokens: promptTokens, outputTokens: completionTokens, statusCode: resp.StatusCode, path: c.Param("path"), preDeducted: getPreDeducted(c), startTime: startTime})
 
 	c.Data(resp.StatusCode, "application/json", anthropicBody)
 }
@@ -400,6 +399,5 @@ func handleAnthropicStream(c *gin.Context, resp *http.Response, user *model.User
 		idemCache.set(c.GetString("idempotencyKey"), &idempotencyEntry{createdAt: time.Now()})
 	}
 
-	go recordLog(user, token, channel, modelName, promptTokens, completionTokens, 0,
-		resp.StatusCode, c.Param("path"), getPreDeducted(c), startTime)
+	enqueueLog(logTask{user: user, token: token, channel: channel, modelName: modelName, inputTokens: promptTokens, outputTokens: completionTokens, statusCode: resp.StatusCode, path: c.Param("path"), preDeducted: getPreDeducted(c), startTime: startTime})
 }
