@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { Card, Row, Col, Typography, Tag, Button, Switch, Toast, InputNumber, Space, Spin } from '@douyinfe/semi-ui'
 import { IconRefresh } from '@douyinfe/semi-icons'
-import { getStatus, getMonitorConfig, updateMonitorConfig, toggleChannelMonitor } from '../api'
+import { getStatus, refreshStatus, getMonitorConfig, updateMonitorConfig, toggleChannelMonitor } from '../api'
 import type { ChannelStatus, MonitorConfig } from '../types'
 import { useAppStore } from '../store'
 
@@ -18,6 +18,16 @@ export default function StatusPage() {
 
   const load = useCallback(() => {
     getStatus()
+      .then((res) => {
+        setData(res.data.data ?? [])
+        setInterval(res.data.interval ?? 5)
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  const refresh = useCallback(() => {
+    setLoading(true)
+    refreshStatus()
       .then((res) => {
         setData(res.data.data ?? [])
         setInterval(res.data.interval ?? 5)
@@ -80,7 +90,7 @@ export default function StatusPage() {
               <Button onClick={handleSaveInterval}>保存间隔</Button>
             </>
           )}
-          <Button icon={<IconRefresh />} onClick={load}>刷新</Button>
+          <Button icon={<IconRefresh />} onClick={refresh}>刷新</Button>
         </Space>
       </div>
 

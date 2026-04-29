@@ -185,6 +185,13 @@ func testModelConnectivity(modelName string, ch model.Channel) *ModelStatus {
 	return result
 }
 
+// RefreshStatus runs all tests immediately, then returns the updated status.
+// POST /api/status
+func RefreshStatus(c *gin.Context) {
+	runAllTests()
+	GetStatus(c)
+}
+
 // GetStatus returns connectivity status for all monitored models.
 // GET /api/status
 func GetStatus(c *gin.Context) {

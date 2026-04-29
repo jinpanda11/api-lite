@@ -119,6 +119,7 @@ export const updateSettings = (settings: Record<string, string>) =>
 // ── Status Monitoring ─────────────────────────────────────────────────────
 
 export const getStatus = () => request.get('/status')
+export const refreshStatus = () => request.post('/status')
 
 export const toggleChannelMonitor = (id: number, monitor_enabled: boolean) =>
   request.put(`/channel/${id}/monitor`, { monitor_enabled })
