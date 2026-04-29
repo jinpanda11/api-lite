@@ -70,22 +70,18 @@ export default function Branding() {
             placeholder="emoji 图标"
             extraText="浏览器标签页上的小图标，支持 emoji（如 ⚡）"
           />
-          <Form.InputNumber
+          <Form.Input
             field="site_logo_size"
             label="Logo 大小"
+            type="number"
             placeholder="默认 20"
-            suffix="px"
-            min={12}
-            max={200}
             extraText="Logo 字体/图片大小（像素），留空使用默认值"
           />
-          <Form.InputNumber
+          <Form.Input
             field="site_name_size"
             label="站点名称大小"
+            type="number"
             placeholder="默认 16"
-            suffix="px"
-            min={12}
-            max={48}
             extraText="站点名称字体大小（像素），留空使用默认值"
           />
 
