@@ -5,7 +5,6 @@ import {NSelect, NInput,NSlider, NButton, useMessage,NTag,NEmpty,NModal,NDivider
 //import type { SelectRenderLabel, SelectRenderTag } from 'naive-ui'
 import { ref ,computed,watch, onMounted,h} from "vue";
 import { SvgIcon } from '@/components/common'
-import { gptFetch, mlog } from "@/api";
 import { homeStore } from "@/store";
 
 const st= ref({ server:'',isShow:false,isLoadData:0 ,"search":''});
@@ -27,74 +26,26 @@ interface modelGroup{
 
 const mGroup= ref<modelGroup[]>([])
 
-const loadModel=async ()=>{
-    try {
-         const modelsData = await gptFetch('/v1/models');
-          mlog('asdsd>> ', modelsData )
-        modelsData.data.forEach((v:any) => {
-              mlog('vv>> ',v )
-              let is=false
-              for(let a of mGroup.value){
-                if(a.key.length==0 && !is){
-                    let model= v.id as string
-                    a.data.push({model})
-                    break;
-                }
-                for(let b of a.key){
-                    if(v.id && v.id.includes(b)){
-                        let model= v.id as string
-                        a.data.push({model})
-                        is=true
-                        break;
-                    }
-                }
-              }
-        });
-        st.value.isLoadData=1
-    } catch (error) {
-        st.value.isLoadData=-1
-        ms.error('Loading Models Error!')
-    } 
-}
+
 
 const initGroup=()=>{
-    // {name:'OpenAi',key:['gpt-'],data:[]}
-    // ,{name:'OpenAi O',key:['o1-','o3-'],data:[]}
-    // ,{name:'Deepseek',key:['deepseek'],data:[]}
-    mGroup.value.push( {name:'Deepseek',key:['deepseek'],data:[],icon:"arcticons:deepseek"} )
-    mGroup.value.push({name:'OpenAi',key:['gpt-'],data:[],'icon':'ri:openai-fill'})
-    mGroup.value.push( {name:'OpenAi O',key:['o1','o3'],data:[],'icon':'ri:openai-fill'} )
-    mGroup.value.push( {name:'Claude',key:['claude','c-3'],data:[],icon:"ri:claude-fill"} )
-    mGroup.value.push( {name:'Gemini',key:['gemini'],data:[],icon:"cbi:gemini"} )
-    mGroup.value.push( {name:'Grok',key:['grok'],data:[],icon:"token:xai"} )
-    mGroup.value.push( {name:'Other',key:[],data:[],isClosed:true } )
+    mGroup.value.push( {name:'Models',key:[],data:[],icon:"ri:openai-fill"} )
 }
 
 const loadSessionModels=()=>{
     const models: string[] = homeStore.myData.session?.models;
     if (!models || models.length === 0) return;
+    const group = mGroup.value[0];
+    if (!group) return;
     for (const modelName of models) {
-        let is = false;
-        for (const a of mGroup.value) {
-            if (a.key.length === 0 && !is) {
-                a.data.push({ model: modelName });
-                break;
-            }
-            for (const b of a.key) {
-                if (modelName.includes(b)) {
-                    a.data.push({ model: modelName });
-                    is = true;
-                    break;
-                }
-            }
-        }
+        group.data.push({ model: modelName });
     }
 }
 
 onMounted(()=>{
  initGroup();
  loadSessionModels();
- loadModel()
+ st.value.isLoadData=1
 })
 
 const successClick=(md:any)=> {
