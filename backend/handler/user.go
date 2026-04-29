@@ -309,7 +309,7 @@ func Login(c *gin.Context) {
 		})
 
 	c.JSON(http.StatusOK, gin.H{
-		"token": token, // kept for API clients that can't use cookies
+		// token set as HttpOnly cookie above; API clients use /api/token instead
 		"user": gin.H{
 			"id":       user.ID,
 			"username": user.Username,

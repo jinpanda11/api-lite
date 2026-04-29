@@ -11,11 +11,30 @@ import (
 	"net/http"
 	"new-api-lite/middleware"
 	"new-api-lite/model"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+// Chat rate limiter (per user, keyed by user ID)
+var chatLimiter = newRateLimiter()
+var chatWindows = []rateWindow{
+	{1 * time.Minute, 30},  // 30 requests per minute per user
+	{1 * time.Hour, 500},   // 500 requests per hour per user
+}
+
+func sanitizeID(s string) string {
+	if len(s) > 64 {
+		s = s[:64]
+	}
+	ok, _ := regexp.MatchString(`^[a-fA-F0-9\-]+$`, s)
+	if !ok {
+		return ""
+	}
+	return s
+}
 
 func shortUUID() string {
 	b := make([]byte, 12)
@@ -99,9 +118,25 @@ type ChatOptions struct {
 func ChatProcess(c *gin.Context) {
 	user := middleware.GetCurrentUser(c)
 
+	// Rate limit per user
+	if !chatLimiter.check(fmt.Sprintf("uid:%d", user.ID), chatWindows) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "chat rate limit exceeded, please slow down"})
+		return
+	}
+
 	var req ChatProcessRequest
 	if err := c.ShouldBindJSON(&req); err != nil || req.Prompt == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt is required"})
+		return
+	}
+
+	// Input length validation
+	if len(req.Prompt) > 32768 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "prompt too long (max 32768 chars)"})
+		return
+	}
+	if len(req.SystemMessage) > 8192 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "systemMessage too long (max 8192 chars)"})
 		return
 	}
 
@@ -183,11 +218,15 @@ func ChatProcess(c *gin.Context) {
 	msgID := shortUUID()
 	convID := shortUUID()
 	if req.Options != nil && req.Options.ConversationID != "" {
-		convID = req.Options.ConversationID
+		if s := sanitizeID(req.Options.ConversationID); s != "" {
+			convID = s
+		}
 	}
 	parentMsgID := ""
-	if req.Options != nil {
-		parentMsgID = req.Options.ParentMessageID
+	if req.Options != nil && req.Options.ParentMessageID != "" {
+		if s := sanitizeID(req.Options.ParentMessageID); s != "" {
+			parentMsgID = s
+		}
 	}
 
 	// Set streaming response headers
