@@ -178,9 +178,8 @@ func testModelConnectivity(modelName string, ch model.Channel) *ModelStatus {
 	defer resp.Body.Close()
 	result.StatusCode = resp.StatusCode
 
-	// Online = HTTP 2xx or 4xx (reachable, just might be auth or model-not-found)
-	// 5xx = server error, offline
-	result.Online = resp.StatusCode < 500
+	// Online = HTTP 2xx only. 4xx/5xx are both offline.
+	result.Online = resp.StatusCode >= 200 && resp.StatusCode < 300
 
 	return result
 }
