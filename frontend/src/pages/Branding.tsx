@@ -6,15 +6,14 @@ const { Title, Text } = Typography
 
 export default function Branding() {
   const [form] = Form.useForm()
-  const [loading, setLoading] = useState(false)
+  const [initValues, setInitValues] = useState<Record<string, string> | null>(null)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    setLoading(true)
     getSettings()
       .then((res) => {
         const s = res.data?.data || {}
-        form.setValues({
+        setInitValues({
           site_name: s.site_name || '',
           site_logo: s.site_logo || '',
           site_title: s.site_title || '',
@@ -24,8 +23,7 @@ export default function Branding() {
         })
       })
       .catch(() => Toast.error('加载设置失败'))
-      .finally(() => setLoading(false))
-  }, [form])
+  }, [])
 
   const handleSave = (values: Record<string, string>) => {
     setSaving(true)
@@ -42,8 +40,8 @@ export default function Branding() {
         自定义站点名称、图标和浏览器标签页显示
       </Text>
 
-      <Card loading={loading}>
-        <Form form={form} labelPosition="left" labelWidth={120} onSubmit={handleSave}>
+      <Card loading={!initValues}>
+        <Form form={form} initValues={initValues || {}} labelPosition="left" labelWidth={120} onSubmit={handleSave}>
           <Form.Input
             field="site_name"
             label="站点名称"
