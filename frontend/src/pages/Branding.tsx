@@ -34,7 +34,7 @@ export default function Branding() {
         .then(() => Toast.success('已保存，刷新页面生效'))
         .catch(() => Toast.error('保存失败'))
         .finally(() => setSaving(false))
-    })
+    }).catch(() => Toast.error('请检查字段格式'))
   }
 
   return (
@@ -73,15 +73,13 @@ export default function Branding() {
           <Form.Input
             field="site_logo_size"
             label="Logo 大小"
-            type="number"
-            placeholder="默认 20"
+            placeholder="默认 20（像素）"
             extraText="Logo 字体/图片大小（像素），留空使用默认值"
           />
           <Form.Input
             field="site_name_size"
             label="站点名称大小"
-            type="number"
-            placeholder="默认 16"
+            placeholder="默认 16（像素）"
             extraText="站点名称字体大小（像素），留空使用默认值"
           />
 
