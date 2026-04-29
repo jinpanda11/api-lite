@@ -123,7 +123,7 @@ func testModelConnectivity(modelName string, ch model.Channel) *ModelStatus {
 
 	baseURL := strings.TrimRight(ch.BaseURL, "/")
 	baseURL = strings.TrimSuffix(baseURL, "/v1")
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := &http.Client{Timeout: 30 * time.Second}
 
 	var testURL, method string
 	var body string
