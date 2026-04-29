@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"new-api-lite/model"
 	"strconv"
@@ -179,8 +180,38 @@ func testModelConnectivity(modelName string, ch model.Channel) *ModelStatus {
 	defer resp.Body.Close()
 	result.StatusCode = resp.StatusCode
 
-	// Online = HTTP 2xx only. 4xx/5xx are both offline.
-	result.Online = resp.StatusCode >= 200 && resp.StatusCode < 300
+	// Read response body to check for actual content (not just HTTP status)
+	respBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	var respBody struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+			Delta struct {
+				Content string `json:"content"`
+			} `json:"delta"`
+		} `json:"choices"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	// Online = 2xx AND response body has actual content (choices with text)
+	result.Online = false
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		if json.Unmarshal(respBytes, &respBody) == nil {
+			if len(respBody.Choices) > 0 && (respBody.Choices[0].Message.Content != "" || respBody.Choices[0].Delta.Content != "") {
+				result.Online = true
+			} else if respBody.Error != nil && respBody.Error.Message != "" {
+				result.Error = respBody.Error.Message
+			}
+		} else {
+			// Non-JSON body, if 2xx treat as online
+			result.Online = true
+		}
+	} else if respBody.Error != nil && respBody.Error.Message != "" {
+		result.Error = respBody.Error.Message
+	}
 
 	return result
 }
