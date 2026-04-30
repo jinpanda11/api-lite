@@ -65,7 +65,6 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 
 		// Status
 		auth.GET("/status", handler.GetStatus)
-		auth.POST("/status", handler.RefreshStatus)
 
 		// Wallet
 		auth.GET("/balance", handler.GetBalance)
@@ -120,6 +119,8 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 
 		// Audit log
 		admin.GET("/admin/audit", handler.GetAuditLogs)
+
+		admin.POST("/status", handler.RefreshStatus)
 
 		// Channel monitor toggle
 		admin.PUT("/channel/:id/monitor", handler.ToggleChannelMonitor)

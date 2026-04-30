@@ -88,9 +88,9 @@ export default function StatusPage() {
                 style={{ width: 140 }}
               />
               <Button onClick={handleSaveInterval}>保存间隔</Button>
+              <Button icon={<IconRefresh />} onClick={refresh}>刷新</Button>
             </>
           )}
-          <Button icon={<IconRefresh />} onClick={refresh}>刷新</Button>
         </Space>
       </div>
 
