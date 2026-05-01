@@ -1,6 +1,7 @@
 package model
 
 import (
+	"strconv"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -26,8 +27,12 @@ type User struct {
 	Balance         float64        `gorm:"default:0" json:"balance"`
 	Status          int            `gorm:"default:1" json:"status"`
 	PriceMultiplier float64        `gorm:"default:1.0" json:"price_multiplier"`
-	TokenVersion int            `gorm:"default:0" json:"-"` // incremented to invalidate JWTs
+	TokenVersion    int            `gorm:"default:0" json:"-"` // incremented to invalidate JWTs
+	DailyDrawQuota    int    `gorm:"default:10" json:"daily_draw_quota"`
+	LastDrawResetDate string `gorm:"size:10" json:"-"`
 }
+
+const DefaultDailyDrawQuota = 10
 
 func (u *User) SetPassword(password string) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -75,4 +80,34 @@ func (u *User) DeductBalance(amount float64) bool {
 
 func (u *User) AddBalance(amount float64) error {
 	return DB.Model(u).UpdateColumn("balance", gorm.Expr("balance + ?", amount)).Error
+}
+
+func (u *User) GetDrawQuota() int {
+	today := time.Now().Format("2006-01-02")
+	if u.LastDrawResetDate != today {
+		quota := DefaultDailyDrawQuota
+		if v, err := GetSetting("daily_draw_quota"); err == nil && v != "" {
+			if n, err2 := strconv.Atoi(v); err2 == nil && n > 0 {
+				quota = n
+			}
+		}
+		DB.Model(u).Updates(map[string]interface{}{
+			"daily_draw_quota":     quota,
+			"last_draw_reset_date": today,
+		})
+		u.DailyDrawQuota = quota
+		u.LastDrawResetDate = today
+		return quota
+	}
+	return u.DailyDrawQuota
+}
+
+func (u *User) DeductDrawQuota() bool {
+	// Atomic: only decrement if quota > 0, avoids TOCTOU race
+	result := DB.Model(u).Where("daily_draw_quota > 0").UpdateColumn("daily_draw_quota", gorm.Expr("daily_draw_quota - 1"))
+	if result.RowsAffected > 0 {
+		u.DailyDrawQuota--
+		return true
+	}
+	return false
 }

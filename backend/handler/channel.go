@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"new-api-lite/model"
 	"sort"
 	"strconv"
@@ -27,12 +29,74 @@ type channelRequest struct {
 	FixedPath string `json:"fixed_path"`
 }
 
+// validateBaseURL parses a base URL and blocks private/reserved IP ranges.
+func validateBaseURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if u.Scheme != "https" && u.Scheme != "http" {
+		return fmt.Errorf("only http/https allowed")
+	}
+	host := u.Hostname()
+	if host == "" {
+		return fmt.Errorf("URL must include a hostname")
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		// Allow hosts that can't resolve (e.g. not yet public DNS)
+		// but still block raw IP literals in private ranges
+		ip := net.ParseIP(host)
+		if ip != nil && isPrivateIP(ip) {
+			return fmt.Errorf("private IP address not allowed: %s", host)
+		}
+		return nil
+	}
+	for _, ip := range ips {
+		if isPrivateIP(ip) {
+			return fmt.Errorf("host %s resolves to private IP %s — not allowed", host, ip)
+		}
+	}
+	return nil
+}
+
+var privateCIDRs []*net.IPNet
+
+func init() {
+	ranges := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"169.254.0.0/16",
+		"0.0.0.0/8",
+		"::1/128",
+		"fc00::/7",
+		"fe80::/10",
+	}
+	for _, cidr := range ranges {
+		_, n, err := net.ParseCIDR(cidr)
+		if err == nil {
+			privateCIDRs = append(privateCIDRs, n)
+		}
+	}
+}
+
+func isPrivateIP(ip net.IP) bool {
+	for _, cidr := range privateCIDRs {
+		if cidr.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // ListChannels godoc
 // GET /api/channel
 func ListChannels(c *gin.Context) {
 	var channels []model.Channel
 	if err := model.DB.Order("priority desc").Find(&channels).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": maskChannels(channels)})
@@ -44,6 +108,10 @@ func CreateChannel(c *gin.Context) {
 	var req channelRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+	if err := validateBaseURL(req.BaseURL); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 	ch := model.Channel{
@@ -80,6 +148,10 @@ func UpdateChannel(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
+	if err := validateBaseURL(req.BaseURL); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
 	updates := map[string]interface{}{
 		"name":       req.Name,
 		"type":       req.Type,
@@ -105,7 +177,7 @@ func UpdateChannel(c *gin.Context) {
 func DeleteChannel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	if err := model.DB.Delete(&model.Channel{}, id).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	audit(c, "delete_channel", fmt.Sprintf("id=%d", id))
@@ -259,13 +331,14 @@ func TestChannel(c *gin.Context) {
 func ListModels(c *gin.Context) {
 	channels, err := model.GetAvailableChannels()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 
 	type ModelInfo struct {
 		ID           string  `json:"id"`
 		ChannelName  string  `json:"channel_name"`
+		ChannelType  string  `json:"channel_type"`
 		InputPrice   float64 `json:"input_price"`
 		OutputPrice  float64 `json:"output_price"`
 		BillingMode  string  `json:"billing_mode,omitempty"`
@@ -296,6 +369,7 @@ func ListModels(c *gin.Context) {
 				models = append(models, ModelInfo{
 					ID:          m,
 					ChannelName: ch.Name,
+					ChannelType: ch.Type,
 					InputPrice:  inP,
 					OutputPrice: outP,
 					BillingMode: bm,
@@ -319,6 +393,7 @@ func ListModels(c *gin.Context) {
 					models = append(models, ModelInfo{
 						ID:          m,
 						ChannelName: ch.Name,
+					ChannelType: ch.Type,
 						InputPrice:  inP,
 						OutputPrice: outP,
 						BillingMode: bm,

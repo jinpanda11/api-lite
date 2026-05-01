@@ -31,7 +31,7 @@ export default function Login() {
       setLoggedIn(true)
       setUser(res.data.user)
       Toast.success('登录成功')
-      navigate('/dashboard')
+      navigate('/draw')
     } catch {
       // Error toast handled by axios interceptor
     } finally {

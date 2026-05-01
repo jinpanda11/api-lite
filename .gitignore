@@ -47,3 +47,12 @@ backend/backups/
 
 # Deployment scripts (may contain credentials)
 deploy.py
+
+# Temp test files
+test_cookie.txt
+chat_test.html
+check_dom.py
+check_monitor.py
+test_script.js
+package-lock.json
+vps_logs.txt

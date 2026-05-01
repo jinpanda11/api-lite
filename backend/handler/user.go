@@ -185,7 +185,7 @@ func Register(c *gin.Context) {
 		Code     string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -267,7 +267,7 @@ func Login(c *gin.Context) {
 		Password string `json:"password" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -362,7 +362,7 @@ func UpdatePassword(c *gin.Context) {
 		NewPassword string `json:"new_password" binding:"required,min=8"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 		return
 	}
 	if !user.CheckPassword(req.OldPassword) {

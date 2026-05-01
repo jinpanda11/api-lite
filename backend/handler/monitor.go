@@ -260,7 +260,7 @@ func ToggleChannelMonitor(c *gin.Context) {
 		MonitorEnabled bool `json:"monitor_enabled"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -306,7 +306,7 @@ func UpdateMonitorConfig(c *gin.Context) {
 		Interval int `json:"interval" binding:"required,min=1,max=1440"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 		return
 	}
 

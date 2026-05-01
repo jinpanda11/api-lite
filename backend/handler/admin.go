@@ -32,7 +32,7 @@ func CreateRedeemCodes(c *gin.Context) {
 		Value float64 `json:"value" binding:"required,gt=0"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -45,7 +45,7 @@ func CreateRedeemCodes(c *gin.Context) {
 		}
 	}
 	if err := model.DB.Create(&codes).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	audit(c, "create_redeem_codes", fmt.Sprintf("count=%d value=%.2f", req.Count, req.Value))
@@ -93,7 +93,7 @@ func UpdateUserStatus(c *gin.Context) {
 		PriceMultiplier *float64 `json:"price_multiplier"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -130,7 +130,7 @@ func UpdateUserStatus(c *gin.Context) {
 		updates["token_version"] = gorm.Expr("token_version + 1")
 	}
 	if err := model.DB.Model(&model.User{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	audit(c, "update_user", fmt.Sprintf("target_id=%d target_user=%s", id, target.Username))

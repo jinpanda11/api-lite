@@ -42,7 +42,7 @@ func GetLogs(c *gin.Context) {
 		PageSize:  pageSize,
 	})
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{

@@ -139,3 +139,14 @@ export const listModelPricing = () => request.get('/admin/model-pricing')
 
 export const updateModelPricing = (modelName: string, data: object) =>
   request.put(`/admin/model-pricing/${encodeURIComponent(modelName)}`, data)
+
+// ── Draw (image generation) ───────────────────────────────────────────────
+
+export const generateImage = (data: {
+  model: string
+  prompt: string
+  size?: string
+  quality?: string
+}) => request.post('/draw', data)
+
+export const getDrawQuota = () => request.get('/draw/quota')

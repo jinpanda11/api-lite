@@ -64,6 +64,8 @@ func GetBranding(c *gin.Context) {
 		"site_logo_size":      settings["site_logo_size"],
 		"site_name_size":      settings["site_name_size"],
 		"redeem_purchase_url": settings["redeem_purchase_url"],
+		"draw_ad_code":        settings["draw_ad_code"],
+		"analytics_code":      settings["analytics_code"],
 	})
 }
 
@@ -99,13 +101,13 @@ func UpdateSettings(c *gin.Context) {
 		Settings map[string]string `json:"settings" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 		return
 	}
 	keysList := make([]string, 0, len(req.Settings))
 	for key, value := range req.Settings {
 		if err := validateSettingValue(key, value); err != nil {
-			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 			return
 		}
 		if err := model.SetSetting(key, value); err != nil {

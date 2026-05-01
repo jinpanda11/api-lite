@@ -11,6 +11,7 @@ import {
   Divider,
   Spin,
   Input,
+  TextArea,
 } from '@douyinfe/semi-ui'
 import { updatePassword, getSettings, updateSettings } from '../api'
 import { useAppStore } from '../store'
@@ -165,19 +166,19 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Register Bonus */}
+              {/* Daily Draw Quota */}
               <div style={{ marginTop: 24, marginBottom: 24 }}>
-                <Text strong>新用户注册赠送</Text>
+                <Text strong>每日画图次数</Text>
                 <Text type="tertiary" style={{ display: 'block', fontSize: 12, marginBottom: 8 }}>
-                  新注册用户自动获得的初始余额，设置为 0 则不赠送
+                  每个用户每天可免费生成的图片数量，管理员不受限制
                 </Text>
                 <Input
-                  placeholder="0.01"
-                  value={settings['register_bonus_balance'] || '0'}
-                  onChange={(v) => updateSetting('register_bonus_balance', v)}
-                  style={{ width: 200 }}
+                  placeholder="10"
+                  value={settings['daily_draw_quota'] || '10'}
+                  onChange={(v) => updateSetting('daily_draw_quota', v)}
+                  style={{ width: 120 }}
                   type="number"
-                  suffix={<Text type="tertiary">$</Text>}
+                  suffix={<Text type="tertiary">次/天</Text>}
                 />
               </div>
 
@@ -192,6 +193,36 @@ export default function Settings() {
                   value={settings['redeem_purchase_url'] || ''}
                   onChange={(v) => updateSetting('redeem_purchase_url', v)}
                   style={{ width: '100%' }}
+                />
+              </div>
+
+              {/* Ad Code */}
+              <div style={{ marginTop: 24, marginBottom: 24 }}>
+                <Text strong>广告代码</Text>
+                <Text type="tertiary" style={{ display: 'block', fontSize: 12, marginBottom: 8 }}>
+                  在 AI 画图页面展示的广告 HTML/JS 代码（如 Google AdSense），留空则不显示广告
+                </Text>
+                <TextArea
+                  placeholder='<script async src="..."></script>'
+                  value={settings['draw_ad_code'] || ''}
+                  onChange={(v) => updateSetting('draw_ad_code', v)}
+                  style={{ width: '100%' }}
+                  rows={4}
+                />
+              </div>
+
+              {/* Analytics Code */}
+              <div style={{ marginTop: 24, marginBottom: 24 }}>
+                <Text strong>统计代码</Text>
+                <Text type="tertiary" style={{ display: 'block', fontSize: 12, marginBottom: 8 }}>
+                  全站访问统计代码，会注入到所有页面的 &lt;head&gt; 中（如 Google Analytics、百度统计）
+                </Text>
+                <TextArea
+                  placeholder='<script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXX"></script>'
+                  value={settings['analytics_code'] || ''}
+                  onChange={(v) => updateSetting('analytics_code', v)}
+                  style={{ width: '100%' }}
+                  rows={4}
                 />
               </div>
 

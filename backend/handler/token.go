@@ -16,7 +16,7 @@ func ListTokens(c *gin.Context) {
 	user := middleware.GetCurrentUser(c)
 	tokens, err := model.GetTokensByUserID(user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": tokens})
@@ -67,7 +67,7 @@ func CreateToken(c *gin.Context) {
 		ExpiredAt *time.Time `json:"expired_at"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -86,7 +86,7 @@ func CreateToken(c *gin.Context) {
 		Status:    model.StatusEnabled,
 	}
 	if err := model.DB.Create(&token).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"data": token})
@@ -111,7 +111,7 @@ func UpdateToken(c *gin.Context) {
 		ExpiredAt *time.Time `json:"expired_at"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "internal error"})
 		return
 	}
 
@@ -134,7 +134,7 @@ func UpdateToken(c *gin.Context) {
 	}
 
 	if err := model.DB.Model(&token).Updates(updates).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	model.CacheInvalidateToken(token.Key)
@@ -153,7 +153,7 @@ func DeleteToken(c *gin.Context) {
 		return
 	}
 	if err := model.DB.Delete(&token).Error; err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	model.CacheInvalidateToken(token.Key)

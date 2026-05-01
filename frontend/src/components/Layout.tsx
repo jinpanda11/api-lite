@@ -11,12 +11,9 @@ import {
 } from '@douyinfe/semi-ui'
 import {
   IconHome,
-  IconKey,
-  IconApps,
-  IconList,
-  IconCreditCard,
-  IconSetting,
+  IconImage,
   IconServer,
+  IconSetting,
   IconMoon,
   IconSun,
   IconExit,
@@ -25,10 +22,9 @@ import {
   IconBell,
   IconPriceTag,
   IconHistory,
-  IconComment,
 } from '@douyinfe/semi-icons'
 import { useAppStore } from '../store'
-import { getUserInfo, getBranding } from '../api'
+import { getUserInfo, getBranding, getDrawQuota } from '../api'
 import NoticeModal from './NoticeModal'
 
 const { Header, Sider, Content } = SemiLayout
@@ -39,13 +35,7 @@ interface LayoutProps {
 }
 
 const NAV_ITEMS = [
-  { itemKey: '/chat', text: '在线聊天', icon: <IconComment /> },
-  { itemKey: '/dashboard', text: '仪表板', icon: <IconHome /> },
-  { itemKey: '/status', text: '状态监控', icon: <IconServer /> },
-  { itemKey: '/tokens', text: '我的令牌', icon: <IconKey /> },
-  { itemKey: '/models', text: '模型市场', icon: <IconApps /> },
-  { itemKey: '/logs', text: '使用记录', icon: <IconList /> },
-  { itemKey: '/wallet', text: '钱包', icon: <IconCreditCard /> },
+  { itemKey: '/draw', text: 'AI 画图', icon: <IconImage /> },
   { itemKey: '/settings', text: '设置', icon: <IconSetting /> },
 ]
 
@@ -53,7 +43,6 @@ const ADMIN_NAV_ITEMS = [
   { itemKey: '/channels', text: '渠道管理', icon: <IconServer /> },
   { itemKey: '/admin/pricing', text: '模型定价', icon: <IconPriceTag /> },
   { itemKey: '/admin/notice', text: '公告管理', icon: <IconBell /> },
-  { itemKey: '/admin/redeem', text: '兑换码', icon: <IconGift /> },
   { itemKey: '/admin/users', text: '用户管理', icon: <IconUser /> },
   { itemKey: '/admin/branding', text: '站点品牌', icon: <IconSetting /> },
   { itemKey: '/admin/audit', text: '审计记录', icon: <IconHistory /> },
@@ -62,7 +51,7 @@ const ADMIN_NAV_ITEMS = [
 export default function AppLayout({ children }: LayoutProps) {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, theme, setTheme, setUser, logout, setLoggedIn } = useAppStore()
+  const { user, loggedIn, theme, setTheme, setUser, logout, setLoggedIn } = useAppStore()
   const [branding, setBranding] = useState<Record<string, string>>({})
   const [logoError, setLogoError] = useState(false)
 
@@ -78,9 +67,9 @@ export default function AppLayout({ children }: LayoutProps) {
       })
       .catch(() => {
         setLoggedIn(false)
-        navigate('/login')
+        setUser(null)
       })
-  }, [setUser, setLoggedIn, navigate])
+  }, [setUser, setLoggedIn])
 
   useEffect(() => {
     getBranding()
@@ -88,18 +77,24 @@ export default function AppLayout({ children }: LayoutProps) {
       .catch(() => {})
   }, [])
 
+  useEffect(() => {
+    if (user) {
+      getDrawQuota()
+        .then((res) => setHeaderQuota({ remaining: res.data.quota_remaining, total: res.data.quota_total }))
+        .catch(() => setHeaderQuota(null))
+    }
+  }, [user, location.pathname])
+
   const navItems =
     user?.role === 'admin'
       ? [...NAV_ITEMS, ...ADMIN_NAV_ITEMS]
       : NAV_ITEMS
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [headerQuota, setHeaderQuota] = useState<{ remaining: number; total: number } | null>(null)
+
   const handleNavSelect = (data: any) => {
     const key = String(data.itemKey)
-    if (key === '/chat') {
-      navigate('/chat-embed')
-      return
-    }
     if (!key.startsWith('divider-')) navigate(key)
   }
 
@@ -159,12 +154,26 @@ export default function AppLayout({ children }: LayoutProps) {
             height: 56,
           }}
         >
-          {user && (
+          {user && user.role !== 'admin' && headerQuota != null && (
             <Badge
-              count={`$${user.balance.toFixed(4)}`}
+              count={`画图 ${headerQuota.remaining}/${headerQuota.total}次`}
+              type={headerQuota.remaining > 0 ? 'success' : 'danger'}
+              style={{ marginRight: 8 }}
+            />
+          )}
+          {user && user.role === 'admin' && (
+            <Badge
+              count="管理员"
               type="primary"
               style={{ marginRight: 8 }}
             />
+          )}
+
+          {!loggedIn && (
+            <div style={{ display: 'flex', gap: 8, marginRight: 8 }}>
+              <Button theme="borderless" onClick={() => navigate('/login')}>登录</Button>
+              <Button type="primary" theme="solid" onClick={() => navigate('/register')}>注册</Button>
+            </div>
           )}
 
           <Button

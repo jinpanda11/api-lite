@@ -134,6 +134,10 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 	chat.POST("/session", handler.ChatSession)
 	chat.POST("/config", handler.ChatConfig)
 
+	// -- Draw API routes (auth required) --
+	chat.POST("/draw", handler.DrawImage)
+	chat.GET("/draw/quota", handler.GetDrawQuota)
+
 	// -- Chat SPA --
 	r.GET("/chat", serveChatIndex(webFS))
 	r.GET("/chat/*filepath", serveChatSPA(webFS))

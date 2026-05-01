@@ -12,13 +12,13 @@ import Wallet from './pages/Wallet'
 import Channels from './pages/Channels'
 import Settings from './pages/Settings'
 import Branding from './pages/Branding'
-import AdminRedeem from './pages/AdminRedeem'
 import AdminUsers from './pages/AdminUsers'
 import ModelPricing from './pages/ModelPricing'
 import AdminNotice from './pages/AdminNotice'
 import AdminAudit from './pages/AdminAudit'
 import StatusPage from './pages/Status'
 import ChatEmbed from './pages/ChatEmbed'
+import Draw from './pages/Draw'
 import { getBranding } from './api'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -30,7 +30,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 function AdminRoute({ children }: { children: React.ReactNode }) {
   const user = useAppStore((s) => s.user)
   if (!user) return <Navigate to="/login" replace />
-  if (user.role !== 'admin') return <Navigate to="/dashboard" replace />
+  if (user.role !== 'admin') return <Navigate to="/draw" replace />
   return <>{children}</>
 }
 
@@ -49,7 +49,6 @@ const ADMIN_ROUTES = [
   { path: '/channels', element: <Channels /> },
   { path: '/admin/pricing', element: <ModelPricing /> },
   { path: '/admin/notice', element: <AdminNotice /> },
-  { path: '/admin/redeem', element: <AdminRedeem /> },
   { path: '/admin/users', element: <AdminUsers /> },
   { path: '/admin/branding', element: <Branding /> },
   { path: '/admin/audit', element: <AdminAudit /> },
@@ -68,6 +67,7 @@ export default function App() {
         const d = res.data || {}
         if (d.site_title) document.title = d.site_title
         if (d.site_favicon) setFavicon(d.site_favicon)
+        if (d.analytics_code) injectAnalytics(d.analytics_code)
       })
       .catch(() => {})
   }, [])
@@ -78,16 +78,9 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        <Route
-          path="/"
-          element={
-            <PrivateRoute>
-              <AppLayout>
-                <Navigate to="/dashboard" replace />
-              </AppLayout>
-            </PrivateRoute>
-          }
-        />
+        // Public routes (no login required, layout handles auth state)
+        <Route path="/draw" element={<AppLayout><Draw /></AppLayout>} />
+        <Route path="/" element={<Navigate to="/draw" replace />} />
 
         {USER_ROUTES.map(({ path, element }) => (
           <Route
@@ -113,10 +106,36 @@ export default function App() {
           />
         ))}
 
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/draw" replace />} />
       </Routes>
     </BrowserRouter>
   )
+}
+
+function injectAnalytics(code: string) {
+  const containerId = 'analytics-inject'
+  // Remove previous injection
+  document.querySelectorAll(`[data-analytics]`).forEach((el) => el.remove())
+  const existing = document.getElementById(containerId)
+  if (existing) existing.remove()
+
+  // Parse HTML and create real script elements (innerHTML won't execute scripts)
+  const temp = document.createElement('div')
+  temp.innerHTML = code
+  temp.querySelectorAll('script').forEach((oldScript) => {
+    const script = document.createElement('script')
+    script.setAttribute('data-analytics', '')
+    Array.from(oldScript.attributes).forEach((attr) => {
+      script.setAttribute(attr.name, attr.value)
+    })
+    script.textContent = oldScript.textContent
+    document.head.appendChild(script)
+  })
+  // Append any non-script elements
+  const container = document.createElement('div')
+  container.id = containerId
+  container.innerHTML = temp.innerHTML.replace(/<script[\s\S]*?<\/script>/gi, '')
+  document.head.appendChild(container)
 }
 
 function setFavicon(value: string) {

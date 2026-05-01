@@ -4,7 +4,7 @@ import { Toast } from '@douyinfe/semi-ui'
 
 const request = axios.create({
   baseURL: '/api',
-  timeout: 30000,
+  timeout: 120000,
 })
 
 request.interceptors.request.use((config) => {
@@ -18,7 +18,7 @@ request.interceptors.response.use(
   (err) => {
     const msg = err.response?.data?.error || err.response?.data?.message || err.message || 'Request failed'
     if (err.response?.status === 401) {
-      window.location.href = '/login'
+      // Don't auto-redirect — Layout handles auth state gracefully
     } else {
       Toast.error(msg)
     }
