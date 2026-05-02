@@ -43,9 +43,6 @@ func main() {
 	// Start daily database backup
 	handler.StartAutoBackup()
 
-	// Start channel connectivity monitor
-	handler.StartMonitor()
-
 	// Setup Gin
 	if !config.C.Server.Debug {
 		gin.SetMode(gin.ReleaseMode)

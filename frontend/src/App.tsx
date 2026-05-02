@@ -16,7 +16,6 @@ import AdminUsers from './pages/AdminUsers'
 import ModelPricing from './pages/ModelPricing'
 import AdminNotice from './pages/AdminNotice'
 import AdminAudit from './pages/AdminAudit'
-import StatusPage from './pages/Status'
 import ChatEmbed from './pages/ChatEmbed'
 import Draw from './pages/Draw'
 import { getBranding } from './api'
@@ -38,7 +37,6 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 const USER_ROUTES = [
   { path: '/chat-embed', element: <ChatEmbed /> },
   { path: '/dashboard', element: <Dashboard /> },
-  { path: '/status', element: <StatusPage /> },
   { path: '/tokens', element: <Tokens /> },
   { path: '/models', element: <Models /> },
   { path: '/logs', element: <Logs /> },

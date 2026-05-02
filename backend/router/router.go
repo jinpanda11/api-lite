@@ -64,8 +64,7 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 		auth.GET("/log", handler.GetLogs)
 
 		// Status
-		auth.GET("/status", handler.GetStatus)
-
+		
 		// Wallet
 		auth.GET("/balance", handler.GetBalance)
 		auth.POST("/redeem", handler.Redeem)
@@ -119,13 +118,6 @@ func Setup(r *gin.Engine, webFS fs.FS) {
 
 		// Audit log
 		admin.GET("/admin/audit", handler.GetAuditLogs)
-
-		admin.POST("/status", handler.RefreshStatus)
-
-		// Channel monitor toggle
-		admin.PUT("/channel/:id/monitor", handler.ToggleChannelMonitor)
-		admin.GET("/admin/monitor-config", handler.GetMonitorConfig)
-		admin.PUT("/admin/monitor-config", handler.UpdateMonitorConfig)
 	}
 
 	// -- Chat API routes (auth required) --

@@ -19,8 +19,6 @@ var numericSettings = map[string]numericBounds{
 	"register_bonus_balance":       {0, 10000},   // registration bonus (dollars)
 	"usage_notify_daily_cost":      {0, 100000},  // daily cost warning threshold
 	"usage_notify_balance_dollars": {0, 100000},  // low balance warning threshold
-	"monitor_interval_seconds":     {30, 86400},  // 30s to 24h
-	"monitor_alert_threshold":      {1, 100},     // consecutive failures before alert
 	"site_logo_size":               {12, 200},    // px
 	"site_name_size":               {12, 48},     // px
 }

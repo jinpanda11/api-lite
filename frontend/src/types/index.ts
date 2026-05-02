@@ -84,22 +84,6 @@ export interface ModelInfo {
   icon_url?: string
 }
 
-export interface ChannelStatus {
-  model: string
-  channel_name: string
-  channel_id: number
-  online: boolean
-  status_code: number
-  latency_ms: number
-  error?: string
-  checked_at: number
-}
-
-export interface MonitorConfig {
-  interval: number
-  channels: { id: number; name: string; monitor_enabled: boolean }[]
-}
-
 export interface TopupLog {
   id: number
   user_id: number

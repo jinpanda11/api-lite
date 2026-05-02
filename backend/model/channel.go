@@ -19,7 +19,6 @@ type Channel struct {
 	Priority  int            `gorm:"default:0" json:"priority"` // higher = preferred
 	Status    int            `gorm:"default:1" json:"status"`
 	FixedPath      string         `gorm:"size:128" json:"fixed_path"`
-	MonitorEnabled bool           `gorm:"default:1" json:"monitor_enabled"`
 }
 
 // escapeLike escapes SQL LIKE wildcard characters so they match literally.

@@ -116,19 +116,6 @@ export const getSettings = () => request.get('/admin/settings')
 export const updateSettings = (settings: Record<string, string>) =>
   request.put('/admin/settings', { settings })
 
-// ── Status Monitoring ─────────────────────────────────────────────────────
-
-export const getStatus = () => request.get('/status')
-export const refreshStatus = () => request.post('/status')
-
-export const toggleChannelMonitor = (id: number, monitor_enabled: boolean) =>
-  request.put(`/channel/${id}/monitor`, { monitor_enabled })
-
-export const getMonitorConfig = () => request.get('/admin/monitor-config')
-
-export const updateMonitorConfig = (interval: number) =>
-  request.put('/admin/monitor-config', { interval })
-
 // ── Audit Log (admin) ──────────────────────────────────────────────────────
 
 export const getAuditLogs = (params?: object) => request.get('/admin/audit', { params })
