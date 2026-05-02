@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -186,7 +187,18 @@ func DrawImage(c *gin.Context) {
 	}
 
 	if imageData == "" {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "上游返回空响应"})
+		preview := string(bodyBytes2)
+		if len(preview) > 500 {
+			preview = preview[:500]
+		}
+		log.Printf("[draw] upstream returned empty image data: status=%d content-type=%s body=%s",
+			resp.StatusCode, contentType, preview)
+		c.JSON(http.StatusBadGateway, gin.H{
+			"error":         "上游返回空响应",
+			"upstream_code": resp.StatusCode,
+			"content_type":  contentType,
+			"body_preview":  preview,
+		})
 		return
 	}
 
