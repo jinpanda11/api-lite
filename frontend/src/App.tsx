@@ -20,6 +20,7 @@ import StatusPage from './pages/Status'
 import ChatEmbed from './pages/ChatEmbed'
 import Draw from './pages/Draw'
 import { getBranding } from './api'
+import { sanitizeHTML } from './utils/sanitize'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const loggedIn = useAppStore((s) => s.loggedIn)
@@ -131,10 +132,10 @@ function injectAnalytics(code: string) {
     script.textContent = oldScript.textContent
     document.head.appendChild(script)
   })
-  // Append any non-script elements
+  // Append sanitized non-script elements
   const container = document.createElement('div')
   container.id = containerId
-  container.innerHTML = temp.innerHTML.replace(/<script[\s\S]*?<\/script>/gi, '')
+  container.innerHTML = sanitizeHTML(temp.innerHTML.replace(/<script[\s\S]*?<\/script>/gi, ''))
   document.head.appendChild(container)
 }
 

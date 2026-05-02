@@ -14,6 +14,7 @@ import {
 import { IconImage, IconCopy, IconDownload, IconUser, IconPlus } from '@douyinfe/semi-icons'
 import { generateImage, getDrawQuota, listModels, getNotices, getBranding } from '../api'
 import { useAppStore } from '../store'
+import { sanitizeHTML } from '../utils/sanitize'
 import type { NoticeItem } from '../components/NoticeModal'
 
 const { Title, Text } = Typography
@@ -25,7 +26,7 @@ function AdSlot({ code }: { code: string }) {
   if (!code) return null
   return (
     <div style={{ marginBottom: 16, textAlign: 'center', overflow: 'hidden' }}>
-      <div dangerouslySetInnerHTML={{ __html: code }} />
+      <div dangerouslySetInnerHTML={{ __html: sanitizeHTML(code) }} />
     </div>
   )
 }
